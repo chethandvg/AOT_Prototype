@@ -25,35 +25,71 @@ public class CodeMergerService
         var namespaces = new Dictionary<string, StringBuilder>();
 
         // Extract using statements and organize by namespace
-        foreach (var task in tasks.OrderBy(t => t.Id))
+        foreach (var task in tasks.Where(t => !string.IsNullOrWhiteSpace(t.GeneratedCode)).OrderBy(t => t.Id))
         {
-            if (string.IsNullOrWhiteSpace(task.GeneratedCode))
-                continue;
-
             var lines = task.GeneratedCode.Split('\n');
             var currentNamespace = "Global";
-            var namespaceContent = new StringBuilder();
+            var inNamespaceBlock = false;
+            var braceCount = 0;
 
-            foreach (var line in lines)
+            for (int i = 0; i < lines.Length; i++)
             {
+                var line = lines[i];
                 var trimmedLine = line.Trim();
 
                 // Collect using statements
                 if (trimmedLine.StartsWith("using ") && trimmedLine.EndsWith(";"))
                 {
                     usings.Add(trimmedLine);
+                    continue;
                 }
-                // Track namespace
-                else if (trimmedLine.StartsWith("namespace "))
+                
+                // Track namespace (both file-scoped and block-scoped)
+                if (trimmedLine.StartsWith("namespace "))
                 {
-                    currentNamespace = trimmedLine.Replace("namespace ", "").Replace(";", "").Trim();
+                    var namespacePart = trimmedLine.Replace("namespace ", "").Trim();
+                    
+                    // Check if it's file-scoped (ends with semicolon)
+                    if (namespacePart.EndsWith(";"))
+                    {
+                        currentNamespace = namespacePart.TrimEnd(';').Trim();
+                        inNamespaceBlock = false;
+                    }
+                    else
+                    {
+                        currentNamespace = namespacePart.Trim();
+                        inNamespaceBlock = true;
+                    }
+                    
                     if (!namespaces.ContainsKey(currentNamespace))
                     {
                         namespaces[currentNamespace] = new StringBuilder();
                     }
+                    continue;
                 }
+                
+                // Track braces for block-scoped namespaces
+                if (inNamespaceBlock)
+                {
+                    if (trimmedLine.StartsWith("{"))
+                    {
+                        braceCount++;
+                        if (braceCount == 1) continue; // Skip the opening brace of namespace
+                    }
+                    if (trimmedLine.EndsWith("}") || trimmedLine == "}")
+                    {
+                        if (braceCount == 1)
+                        {
+                            braceCount = 0;
+                            inNamespaceBlock = false;
+                            continue; // Skip the closing brace of namespace
+                        }
+                        braceCount--;
+                    }
+                }
+                
                 // Add content to current namespace
-                else if (!string.IsNullOrWhiteSpace(trimmedLine))
+                if (!string.IsNullOrWhiteSpace(trimmedLine))
                 {
                     if (!namespaces.ContainsKey(currentNamespace))
                     {
@@ -73,18 +109,18 @@ public class CodeMergerService
 
         mergedCode.AppendLine();
 
-        // Add each namespace with its content
+        // Add each namespace with its content (use block-scoped for consistency)
         foreach (var ns in namespaces.OrderBy(kvp => kvp.Key))
         {
             if (ns.Key == "Global")
             {
-                mergedCode.AppendLine(ns.Value.ToString());
+                mergedCode.Append(ns.Value);
             }
             else
             {
                 mergedCode.AppendLine($"namespace {ns.Key}");
                 mergedCode.AppendLine("{");
-                mergedCode.AppendLine(ns.Value.ToString());
+                mergedCode.Append(ns.Value);
                 mergedCode.AppendLine("}");
             }
         }
@@ -95,11 +131,14 @@ public class CodeMergerService
         var validationResult = await _validatorService.ValidateCodeAsync(finalCode);
         if (!validationResult.IsValid)
         {
-            Console.WriteLine("Warning: Merged code has validation issues:");
+            var errorMessageBuilder = new StringBuilder();
+            errorMessageBuilder.AppendLine("Merged code failed validation:");
             foreach (var error in validationResult.Errors)
             {
-                Console.WriteLine($"  - {error}");
+                errorMessageBuilder.AppendLine($"  - {error}");
             }
+
+            throw new InvalidOperationException(errorMessageBuilder.ToString());
         }
 
         return finalCode;

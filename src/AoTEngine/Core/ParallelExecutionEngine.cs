@@ -29,7 +29,6 @@ public class ParallelExecutionEngine
     /// </summary>
     public async Task<List<TaskNode>> ExecuteTasksAsync(List<TaskNode> tasks)
     {
-        var taskDict = tasks.ToDictionary(t => t.Id, t => t);
         var completedTasks = new Dictionary<string, TaskNode>();
 
         while (completedTasks.Count < tasks.Count)
@@ -75,7 +74,7 @@ public class ParallelExecutionEngine
     private bool AreAllDependenciesMet(TaskNode task, Dictionary<string, TaskNode> completedTasks)
     {
         return task.Dependencies.All(depId => 
-            completedTasks.ContainsKey(depId) && completedTasks[depId].IsValidated);
+            completedTasks.TryGetValue(depId, out var completedTask) && completedTask.IsValidated);
     }
 
     /// <summary>
@@ -151,6 +150,13 @@ public class ParallelExecutionEngine
             }
         }
 
+        // Verify task was validated successfully
+        if (!task.IsValidated)
+        {
+            throw new InvalidOperationException(
+                $"Task {task.Id} failed to validate after {MaxRetries} attempts.");
+        }
+
         return task;
     }
 
@@ -161,6 +167,7 @@ public class ParallelExecutionEngine
     {
         var sorted = new List<TaskNode>();
         var visited = new HashSet<string>();
+        var visiting = new HashSet<string>();
         var taskDict = tasks.ToDictionary(t => t.Id, t => t);
 
         void Visit(TaskNode task)
@@ -168,16 +175,21 @@ public class ParallelExecutionEngine
             if (visited.Contains(task.Id))
                 return;
 
-            visited.Add(task.Id);
-
-            foreach (var depId in task.Dependencies)
+            if (visiting.Contains(task.Id))
             {
-                if (taskDict.TryGetValue(depId, out var depTask))
-                {
-                    Visit(depTask);
-                }
+                throw new InvalidOperationException(
+                    $"Circular dependency detected involving task {task.Id}");
             }
 
+            visiting.Add(task.Id);
+
+            foreach (var depId in task.Dependencies.Where(depId => taskDict.ContainsKey(depId)))
+            {
+                Visit(taskDict[depId]);
+            }
+
+            visiting.Remove(task.Id);
+            visited.Add(task.Id);
             sorted.Add(task);
         }
 

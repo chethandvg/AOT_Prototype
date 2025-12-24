@@ -70,7 +70,7 @@ The system automatically detects:
 ## Technical Implementation
 
 ### Technology Stack
-- **.NET 10.0**: Latest .NET runtime
+- **.NET 9.0**: Latest .NET runtime
 - **OpenAI SDK 2.8.0**: GPT integration
 - **Roslyn 5.0.0**: C# code analysis and compilation
 - **Newtonsoft.Json 13.0.4**: JSON serialization

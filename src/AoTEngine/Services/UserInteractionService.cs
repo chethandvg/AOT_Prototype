@@ -10,7 +10,7 @@ public class UserInteractionService
     /// <summary>
     /// Asks the user for clarification when there's uncertainty.
     /// </summary>
-    public async Task<string> AskForClarificationAsync(string question, string context = "")
+    public Task<string> AskForClarificationAsync(string question, string context = "")
     {
         Console.WriteLine();
         Console.WriteLine("═══════════════════════════════════════════════════════");
@@ -30,18 +30,18 @@ public class UserInteractionService
         Console.WriteLine();
         Console.Write("Your response: ");
         
-        var response = await Task.Run(() => Console.ReadLine());
+        var response = Console.ReadLine();
         
         Console.WriteLine("═══════════════════════════════════════════════════════");
         Console.WriteLine();
         
-        return response ?? string.Empty;
+        return Task.FromResult(response ?? string.Empty);
     }
 
     /// <summary>
     /// Asks the user to choose from multiple options.
     /// </summary>
-    public async Task<string> AskForChoiceAsync(string question, List<string> options, string context = "")
+    public Task<string> AskForChoiceAsync(string question, List<string> options, string context = "")
     {
         Console.WriteLine();
         Console.WriteLine("═══════════════════════════════════════════════════════");
@@ -69,7 +69,7 @@ public class UserInteractionService
         Console.WriteLine();
         Console.Write($"Enter your choice (1-{options.Count}): ");
         
-        var choice = await Task.Run(() => Console.ReadLine());
+        var choice = Console.ReadLine();
         
         if (int.TryParse(choice, out int index) && index >= 1 && index <= options.Count)
         {
@@ -77,19 +77,19 @@ public class UserInteractionService
             Console.WriteLine($"Selected: {selectedOption}");
             Console.WriteLine("═══════════════════════════════════════════════════════");
             Console.WriteLine();
-            return selectedOption;
+            return Task.FromResult(selectedOption);
         }
         
         Console.WriteLine("Invalid choice. Using first option as default.");
         Console.WriteLine("═══════════════════════════════════════════════════════");
         Console.WriteLine();
-        return options[0];
+        return Task.FromResult(options[0]);
     }
 
     /// <summary>
     /// Asks the user for confirmation.
     /// </summary>
-    public async Task<bool> AskForConfirmationAsync(string question, string context = "")
+    public Task<bool> AskForConfirmationAsync(string question, string context = "")
     {
         Console.WriteLine();
         Console.WriteLine("═══════════════════════════════════════════════════════");
@@ -107,14 +107,14 @@ public class UserInteractionService
         Console.WriteLine(question);
         Console.Write("Proceed? (y/n): ");
         
-        var response = await Task.Run(() => Console.ReadLine());
+        var response = Console.ReadLine();
         var confirmed = response?.Trim().ToLower().StartsWith("y") ?? false;
         
         Console.WriteLine(confirmed ? "✓ Confirmed" : "✗ Cancelled");
         Console.WriteLine("═══════════════════════════════════════════════════════");
         Console.WriteLine();
         
-        return confirmed;
+        return Task.FromResult(confirmed);
     }
 
     /// <summary>

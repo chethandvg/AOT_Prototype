@@ -16,26 +16,37 @@ public class CodeValidatorService
 
     public CodeValidatorService()
     {
-        // Add common references
+        // Add common references with error handling
         _references = new List<MetadataReference>
         {
             MetadataReference.CreateFromFile(typeof(object).Assembly.Location),
             MetadataReference.CreateFromFile(typeof(Console).Assembly.Location),
-            MetadataReference.CreateFromFile(typeof(System.Linq.Enumerable).Assembly.Location),
-            MetadataReference.CreateFromFile(Assembly.Load("System.Runtime").Location),
-            MetadataReference.CreateFromFile(Assembly.Load("System.Collections").Location),
-            MetadataReference.CreateFromFile(Assembly.Load("System.Text.RegularExpressions").Location)
+            MetadataReference.CreateFromFile(typeof(System.Linq.Enumerable).Assembly.Location)
         };
 
-        // Try to add netstandard reference, but don't fail if unavailable
+        // Try to load additional assemblies with error handling
+        TryAddAssemblyReference("System.Runtime");
+        TryAddAssemblyReference("System.Collections");
+        TryAddAssemblyReference("System.Text.RegularExpressions");
+        TryAddAssemblyReference("netstandard");
+    }
+
+    private void TryAddAssemblyReference(string assemblyName)
+    {
         try
         {
-            _references.Add(MetadataReference.CreateFromFile(Assembly.Load("netstandard").Location));
+            var assembly = Assembly.Load(assemblyName);
+            _references.Add(MetadataReference.CreateFromFile(assembly.Location));
         }
         catch (FileNotFoundException)
         {
-            // netstandard may not be available in all .NET runtime environments
-            // Continue without it as the other references should be sufficient
+            // Assembly not available in this runtime environment
+            // Continue without it - core references should be sufficient
+        }
+        catch (Exception ex)
+        {
+            // Log but don't fail on assembly loading errors
+            Console.WriteLine($"Warning: Could not load assembly {assemblyName}: {ex.Message}");
         }
     }
 

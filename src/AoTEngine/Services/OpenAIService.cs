@@ -62,7 +62,19 @@ Return ONLY valid JSON with the structure specified.";
             try
             {
                 var completion = await _chatClient.CompleteChatAsync(messages);
-                var content = completion.Value.Content[0].Text;
+                var contentParts = completion.Value.Content;
+                
+                if (contentParts == null || contentParts.Count == 0)
+                {
+                    if (attempt == MaxRetries - 1)
+                    {
+                        throw new InvalidOperationException("OpenAI chat completion returned no content.");
+                    }
+                    await Task.Delay(1000 * (attempt + 1));
+                    continue;
+                }
+
+                var content = contentParts[0].Text;
 
                 // Try to parse the JSON response
                 var response = JsonConvert.DeserializeObject<TaskDecompositionResponse>(content);
@@ -71,9 +83,16 @@ Return ONLY valid JSON with the structure specified.";
                     return response;
                 }
             }
-            catch (JsonException)
+            catch (HttpRequestException ex)
             {
                 if (attempt == MaxRetries - 1) throw;
+                Console.WriteLine($"HTTP error during task decomposition (attempt {attempt + 1}): {ex.Message}");
+                await Task.Delay(1000 * (attempt + 1));
+            }
+            catch (JsonException ex)
+            {
+                if (attempt == MaxRetries - 1) throw;
+                Console.WriteLine($"JSON parsing error during task decomposition (attempt {attempt + 1}): {ex.Message}");
                 await Task.Delay(1000 * (attempt + 1));
             }
         }
@@ -94,13 +113,11 @@ Return ONLY valid JSON with the structure specified.";
         if (task.Dependencies.Any())
         {
             contextBuilder.AppendLine("\nDependent task outputs:");
-            foreach (var depId in task.Dependencies)
+            foreach (var depId in task.Dependencies.Where(depId => completedTasks.ContainsKey(depId)))
             {
-                if (completedTasks.TryGetValue(depId, out var depTask))
-                {
-                    contextBuilder.AppendLine($"\n{depId}:");
-                    contextBuilder.AppendLine(depTask.GeneratedCode);
-                }
+                var depTask = completedTasks[depId];
+                contextBuilder.AppendLine($"\n{depId}:");
+                contextBuilder.AppendLine(depTask.GeneratedCode);
             }
         }
 
@@ -120,8 +137,34 @@ Return ONLY the C# code without any markdown formatting or explanations.";
             new UserChatMessage(userPrompt)
         };
 
-        var completion = await _chatClient.CompleteChatAsync(messages);
-        return completion.Value.Content[0].Text.Trim();
+        for (int attempt = 0; attempt < MaxRetries; attempt++)
+        {
+            try
+            {
+                var completion = await _chatClient.CompleteChatAsync(messages);
+                var contentParts = completion.Value.Content;
+                
+                if (contentParts == null || contentParts.Count == 0)
+                {
+                    if (attempt == MaxRetries - 1)
+                    {
+                        throw new InvalidOperationException("OpenAI chat completion returned no content.");
+                    }
+                    await Task.Delay(1000 * (attempt + 1));
+                    continue;
+                }
+
+                return contentParts[0].Text.Trim();
+            }
+            catch (HttpRequestException ex)
+            {
+                if (attempt == MaxRetries - 1) throw;
+                Console.WriteLine($"HTTP error during code generation (attempt {attempt + 1}): {ex.Message}");
+                await Task.Delay(1000 * (attempt + 1));
+            }
+        }
+
+        throw new InvalidOperationException("Failed to generate code after multiple attempts");
     }
 
     /// <summary>
@@ -155,7 +198,33 @@ Fix the code and return ONLY the corrected C# code without any markdown formatti
             new UserChatMessage(userPrompt)
         };
 
-        var completion = await _chatClient.CompleteChatAsync(messages);
-        return completion.Value.Content[0].Text.Trim();
+        for (int attempt = 0; attempt < MaxRetries; attempt++)
+        {
+            try
+            {
+                var completion = await _chatClient.CompleteChatAsync(messages);
+                var contentParts = completion.Value.Content;
+                
+                if (contentParts == null || contentParts.Count == 0)
+                {
+                    if (attempt == MaxRetries - 1)
+                    {
+                        throw new InvalidOperationException("OpenAI chat completion returned no content.");
+                    }
+                    await Task.Delay(1000 * (attempt + 1));
+                    continue;
+                }
+
+                return contentParts[0].Text.Trim();
+            }
+            catch (HttpRequestException ex)
+            {
+                if (attempt == MaxRetries - 1) throw;
+                Console.WriteLine($"HTTP error during code regeneration (attempt {attempt + 1}): {ex.Message}");
+                await Task.Delay(1000 * (attempt + 1));
+            }
+        }
+
+        throw new InvalidOperationException("Failed to regenerate code after multiple attempts");
     }
 }

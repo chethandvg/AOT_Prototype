@@ -55,7 +55,7 @@ AoTEngine/
 
 ## Prerequisites
 
-- .NET 10.0 SDK or later
+- .NET 9.0 SDK or later
 - OpenAI API Key
 
 ## Installation
@@ -202,7 +202,7 @@ dotnet test
 
 ## Key Technologies
 
-- **C# / .NET 10.0**: Core framework
+- **C# / .NET 9.0**: Core framework
 - **OpenAI SDK**: GPT integration for code generation
 - **Roslyn (Microsoft.CodeAnalysis)**: Code compilation and validation
 - **Newtonsoft.Json**: JSON serialization

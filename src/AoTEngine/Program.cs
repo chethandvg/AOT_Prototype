@@ -40,6 +40,21 @@ if (string.IsNullOrWhiteSpace(userRequest))
     userRequest = "Create a simple calculator class in C# that can add, subtract, multiply, and divide two numbers. Include input validation and unit tests.";
     Console.WriteLine($"\nUsing demo request: {userRequest}");
 }
+else
+{
+    // Basic input sanitization
+    userRequest = userRequest.Trim();
+    
+    // Validate input length
+    if (userRequest.Length > 2000)
+    {
+        Console.WriteLine("Error: Request is too long. Please limit your request to 2000 characters.");
+        Environment.Exit(1);
+    }
+    
+    // Remove potentially harmful characters
+    userRequest = System.Text.RegularExpressions.Regex.Replace(userRequest, @"[\x00-\x08\x0B\x0C\x0E-\x1F]", string.Empty);
+}
 
 Console.WriteLine();
 

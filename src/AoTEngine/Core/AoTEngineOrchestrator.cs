@@ -85,6 +85,10 @@ public class AoTEngineOrchestrator
             result.Success = false;
             result.ErrorMessage = ex.Message;
             Console.WriteLine($"\n✗ AoT Engine execution failed: {ex.Message}");
+            
+            // Log full exception details for diagnostics (stack trace, inner exceptions, etc.)
+            Console.Error.WriteLine("\nDetailed exception information:");
+            Console.Error.WriteLine(ex.ToString());
         }
 
         return result;
