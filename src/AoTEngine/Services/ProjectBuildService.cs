@@ -11,9 +11,30 @@ namespace AoTEngine.Services;
 /// </summary>
 public class ProjectBuildService
 {
+    private readonly OpenAIService? _openAIService;
+
+    /// <summary>
+    /// Creates a new ProjectBuildService without OpenAI integration.
+    /// Package versions will use fallback defaults.
+    /// </summary>
+    public ProjectBuildService()
+    {
+        _openAIService = null;
+    }
+
+    /// <summary>
+    /// Creates a new ProjectBuildService with OpenAI integration for dynamic package version resolution.
+    /// </summary>
+    /// <param name="openAIService">OpenAI service for querying latest package versions</param>
+    public ProjectBuildService(OpenAIService openAIService)
+    {
+        _openAIService = openAIService;
+    }
+
     /// <summary>
     /// Creates a new .NET project from a list of tasks, saving each task's code to separate files
     /// and adding required package references dynamically.
+    /// Uses OpenAI to get latest stable package versions compatible with .NET 9.
     /// </summary>
     /// <param name="outputDirectory">Directory where the project should be created</param>
     /// <param name="projectName">Name of the project</param>
@@ -44,16 +65,37 @@ public class ProjectBuildService
 
             Directory.CreateDirectory(projectPath);
 
-            // Step 1: Extract all required packages from tasks before creating the project
+            // Step 1: Extract all required package names from tasks before creating the project
             Console.WriteLine("   📋 Extracting required packages from generated code...");
-            var allPackages = ExtractRequiredPackagesFromTasks(tasks);
+            var packageNames = ExtractRequiredPackageNamesFromTasks(tasks);
             
-            if (allPackages.Any())
+            if (packageNames.Any())
             {
-                Console.WriteLine($"   📦 Found {allPackages.Count} required package(s): {string.Join(", ", allPackages.Keys)}");
+                Console.WriteLine($"   📦 Found {packageNames.Count} required package(s): {string.Join(", ", packageNames)}");
             }
 
-            // Step 2: Create new console project
+            // Step 2: Get package versions from OpenAI (if available) or use fallbacks
+            Dictionary<string, string> allPackages;
+            if (packageNames.Any())
+            {
+                if (_openAIService != null)
+                {
+                    Console.WriteLine("   🤖 Querying OpenAI for latest stable .NET 9 compatible package versions...");
+                    allPackages = await _openAIService.GetPackageVersionsAsync(packageNames);
+                    Console.WriteLine($"   ✓ Retrieved versions for {allPackages.Count} package(s)");
+                }
+                else
+                {
+                    Console.WriteLine("   ℹ️ Using fallback package versions (OpenAI not configured)");
+                    allPackages = GetFallbackPackageVersions(packageNames);
+                }
+            }
+            else
+            {
+                allPackages = new Dictionary<string, string>();
+            }
+
+            // Step 3: Create new console project
             Console.WriteLine("   🔧 Creating .NET console project...");
             var createProcessInfo = new ProcessStartInfo
             {
@@ -82,7 +124,7 @@ public class ProjectBuildService
 
             Console.WriteLine("   ✓ Project created");
 
-            // Step 3: Add package references to .csproj file
+            // Step 4: Add package references to .csproj file
             if (allPackages.Any())
             {
                 Console.WriteLine("   📦 Adding package references to project...");
@@ -91,19 +133,19 @@ public class ProjectBuildService
                 Console.WriteLine($"   ✓ Added {allPackages.Count} package reference(s)");
             }
 
-            // Step 4: Save each task's code to separate files
+            // Step 5: Save each task's code to separate files
             Console.WriteLine("   📁 Saving generated code to separate files...");
             var generatedFiles = await SaveTaskCodeToFilesAsync(projectPath, tasks);
             Console.WriteLine($"   ✓ Created {generatedFiles.Count} code file(s)");
 
-            // Step 5: Create a minimal Program.cs entry point if not already generated
+            // Step 6: Create a minimal Program.cs entry point if not already generated
             await CreateEntryPointIfNeededAsync(projectPath, tasks);
 
             result.ProjectPath = projectPath;
             result.ProgramFilePath = Path.Combine(projectPath, "Program.cs");
             result.GeneratedFiles = generatedFiles;
 
-            // Step 6: Restore packages
+            // Step 7: Restore packages
             Console.WriteLine("\n📥 Restoring packages...");
             var restoreResult = await RestorePackagesAsync(projectPath);
             if (!restoreResult.Success)
@@ -115,7 +157,7 @@ public class ProjectBuildService
             }
             Console.WriteLine("   ✓ Packages restored");
 
-            // Step 7: Build the project to validate
+            // Step 8: Build the project to validate
             Console.WriteLine("\n🔨 Building project to validate code...");
             var buildResult = await BuildProjectAsync(projectPath);
 
@@ -146,41 +188,42 @@ public class ProjectBuildService
     }
 
     /// <summary>
-    /// Extracts required packages from all tasks, including packages specified in RequiredPackages
+    /// Extracts required package names from all tasks, including packages specified in RequiredPackages
     /// and packages detected from using statements in generated code.
+    /// Returns only package names - versions will be resolved by OpenAI.
     /// </summary>
-    private Dictionary<string, string> ExtractRequiredPackagesFromTasks(List<TaskNode> tasks)
+    private List<string> ExtractRequiredPackageNamesFromTasks(List<TaskNode> tasks)
     {
-        var packages = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var packageNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        // Common package mappings for NuGet packages based on using statements
-        var usingToPackageMap = new Dictionary<string, (string PackageName, string Version)>(StringComparer.OrdinalIgnoreCase)
+        // Common mappings from using statements to NuGet package names
+        var usingToPackageMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
             // Microsoft.Extensions packages
-            { "Microsoft.Extensions.DependencyInjection", ("Microsoft.Extensions.DependencyInjection", "9.0.0") },
-            { "Microsoft.Extensions.Logging", ("Microsoft.Extensions.Logging", "9.0.0") },
-            { "Microsoft.Extensions.Configuration", ("Microsoft.Extensions.Configuration", "9.0.0") },
-            { "Microsoft.Extensions.Hosting", ("Microsoft.Extensions.Hosting", "9.0.0") },
-            { "Microsoft.Extensions.Http", ("Microsoft.Extensions.Http", "9.0.0") },
-            { "Microsoft.Extensions.Options", ("Microsoft.Extensions.Options", "9.0.0") },
-            { "Microsoft.Extensions.Caching", ("Microsoft.Extensions.Caching.Memory", "9.0.0") },
+            { "Microsoft.Extensions.DependencyInjection", "Microsoft.Extensions.DependencyInjection" },
+            { "Microsoft.Extensions.Logging", "Microsoft.Extensions.Logging" },
+            { "Microsoft.Extensions.Configuration", "Microsoft.Extensions.Configuration" },
+            { "Microsoft.Extensions.Hosting", "Microsoft.Extensions.Hosting" },
+            { "Microsoft.Extensions.Http", "Microsoft.Extensions.Http" },
+            { "Microsoft.Extensions.Options", "Microsoft.Extensions.Options" },
+            { "Microsoft.Extensions.Caching", "Microsoft.Extensions.Caching.Memory" },
             
             // Entity Framework Core
-            { "Microsoft.EntityFrameworkCore", ("Microsoft.EntityFrameworkCore", "9.0.0") },
+            { "Microsoft.EntityFrameworkCore", "Microsoft.EntityFrameworkCore" },
             
             // JSON
-            { "Newtonsoft.Json", ("Newtonsoft.Json", "13.0.4") },
-            { "System.Text.Json", ("System.Text.Json", "9.0.0") },
+            { "Newtonsoft.Json", "Newtonsoft.Json" },
+            { "System.Text.Json", "System.Text.Json" },
             
             // Popular libraries
-            { "Dapper", ("Dapper", "2.1.35") },
-            { "AutoMapper", ("AutoMapper", "13.0.1") },
-            { "FluentValidation", ("FluentValidation", "11.11.0") },
-            { "Serilog", ("Serilog", "4.2.0") },
-            { "Polly", ("Polly", "8.5.0") },
+            { "Dapper", "Dapper" },
+            { "AutoMapper", "AutoMapper" },
+            { "FluentValidation", "FluentValidation" },
+            { "Serilog", "Serilog" },
+            { "Polly", "Polly" },
             
             // Roslyn
-            { "Microsoft.CodeAnalysis", ("Microsoft.CodeAnalysis.CSharp", "4.11.0") },
+            { "Microsoft.CodeAnalysis", "Microsoft.CodeAnalysis.CSharp" },
         };
 
         foreach (var task in tasks.Where(t => !string.IsNullOrWhiteSpace(t.GeneratedCode)))
@@ -193,12 +236,7 @@ public class ProjectBuildService
                     // Parse package specification (e.g., "Newtonsoft.Json" or "Newtonsoft.Json:13.0.4")
                     var parts = package.Split(':');
                     var packageName = parts[0].Trim();
-                    var version = parts.Length > 1 ? parts[1].Trim() : "latest";
-
-                    if (!packages.ContainsKey(packageName))
-                    {
-                        packages[packageName] = version;
-                    }
+                    packageNames.Add(packageName);
                 }
             }
 
@@ -211,17 +249,27 @@ public class ProjectBuildService
                 {
                     if (usingStatement.StartsWith(mapping.Key, StringComparison.OrdinalIgnoreCase))
                     {
-                        if (!packages.ContainsKey(mapping.Value.PackageName))
-                        {
-                            packages[mapping.Value.PackageName] = mapping.Value.Version;
-                        }
+                        packageNames.Add(mapping.Value);
                         break;
                     }
                 }
             }
         }
 
-        return packages;
+        return packageNames.ToList();
+    }
+
+    /// <summary>
+    /// Gets fallback package versions when OpenAI is not available.
+    /// </summary>
+    private Dictionary<string, string> GetFallbackPackageVersions(List<string> packageNames)
+    {
+        var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var packageName in packageNames)
+        {
+            result[packageName] = GetDefaultVersionForPackage(packageName);
+        }
+        return result;
     }
 
     /// <summary>
@@ -304,32 +352,11 @@ public class ProjectBuildService
 
     /// <summary>
     /// Gets a sensible default version for a package when "latest" is specified.
-    /// Falls back to a recent stable version if package is not in the known list.
+    /// Uses the shared KnownPackageVersions for consistency.
     /// </summary>
     private string GetDefaultVersionForPackage(string packageName)
     {
-        // Known stable versions for common packages
-        var defaultVersions = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
-        {
-            { "Newtonsoft.Json", "13.0.4" },
-            { "Microsoft.Extensions.DependencyInjection", "9.0.0" },
-            { "Microsoft.Extensions.Logging", "9.0.0" },
-            { "Microsoft.Extensions.Configuration", "9.0.0" },
-            { "Microsoft.Extensions.Hosting", "9.0.0" },
-            { "Microsoft.Extensions.Http", "9.0.0" },
-            { "Microsoft.Extensions.Options", "9.0.0" },
-            { "Microsoft.Extensions.Caching.Memory", "9.0.0" },
-            { "Microsoft.EntityFrameworkCore", "9.0.0" },
-            { "System.Text.Json", "9.0.0" },
-            { "Dapper", "2.1.35" },
-            { "AutoMapper", "13.0.1" },
-            { "FluentValidation", "11.11.0" },
-            { "Serilog", "4.2.0" },
-            { "Polly", "8.5.0" },
-            { "Microsoft.CodeAnalysis.CSharp", "4.11.0" },
-        };
-
-        return defaultVersions.TryGetValue(packageName, out var version) ? version : "1.0.0";
+        return KnownPackageVersions.GetVersionWithFallback(packageName);
     }
 
     /// <summary>
