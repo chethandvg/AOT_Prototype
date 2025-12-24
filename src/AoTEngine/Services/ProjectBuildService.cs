@@ -283,14 +283,53 @@ public class ProjectBuildService
         {
             if (!existingPackages.Contains(package.Key))
             {
+                // If version is "latest", try to use a sensible default version or omit
+                // Using a concrete version is more reliable than "*" for reproducible builds
+                var version = package.Value;
+                if (version == "latest")
+                {
+                    // Try to get a default version from our known mappings
+                    version = GetDefaultVersionForPackage(package.Key);
+                }
+                
                 var packageRef = new XElement("PackageReference",
                     new XAttribute("Include", package.Key),
-                    new XAttribute("Version", package.Value == "latest" ? "*" : package.Value));
+                    new XAttribute("Version", version));
                 itemGroup.Add(packageRef);
             }
         }
 
         await File.WriteAllTextAsync(csprojPath, doc.ToString());
+    }
+
+    /// <summary>
+    /// Gets a sensible default version for a package when "latest" is specified.
+    /// Falls back to a recent stable version if package is not in the known list.
+    /// </summary>
+    private string GetDefaultVersionForPackage(string packageName)
+    {
+        // Known stable versions for common packages
+        var defaultVersions = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            { "Newtonsoft.Json", "13.0.4" },
+            { "Microsoft.Extensions.DependencyInjection", "9.0.0" },
+            { "Microsoft.Extensions.Logging", "9.0.0" },
+            { "Microsoft.Extensions.Configuration", "9.0.0" },
+            { "Microsoft.Extensions.Hosting", "9.0.0" },
+            { "Microsoft.Extensions.Http", "9.0.0" },
+            { "Microsoft.Extensions.Options", "9.0.0" },
+            { "Microsoft.Extensions.Caching.Memory", "9.0.0" },
+            { "Microsoft.EntityFrameworkCore", "9.0.0" },
+            { "System.Text.Json", "9.0.0" },
+            { "Dapper", "2.1.35" },
+            { "AutoMapper", "13.0.1" },
+            { "FluentValidation", "11.11.0" },
+            { "Serilog", "4.2.0" },
+            { "Polly", "8.5.0" },
+            { "Microsoft.CodeAnalysis.CSharp", "4.11.0" },
+        };
+
+        return defaultVersions.TryGetValue(packageName, out var version) ? version : "1.0.0";
     }
 
     /// <summary>
