@@ -1,0 +1,137 @@
+using AoTEngine.Models;
+using AoTEngine.Services;
+
+namespace AoTEngine.Core;
+
+/// <summary>
+/// Main orchestrator for the AoT (Atom of Thought) Engine.
+/// </summary>
+public class AoTEngineOrchestrator
+{
+    private readonly OpenAIService _openAIService;
+    private readonly ParallelExecutionEngine _executionEngine;
+    private readonly CodeMergerService _mergerService;
+    private readonly UserInteractionService _userInteractionService;
+
+    public AoTEngineOrchestrator(
+        OpenAIService openAIService,
+        ParallelExecutionEngine executionEngine,
+        CodeMergerService mergerService,
+        UserInteractionService userInteractionService)
+    {
+        _openAIService = openAIService;
+        _executionEngine = executionEngine;
+        _mergerService = mergerService;
+        _userInteractionService = userInteractionService;
+    }
+
+    /// <summary>
+    /// Executes the complete AoT workflow.
+    /// </summary>
+    public async Task<AoTResult> ExecuteAsync(string userRequest, string context = "")
+    {
+        var result = new AoTResult { OriginalRequest = userRequest };
+
+        try
+        {
+            // Step 1: Decompose the request into atomic subtasks
+            Console.WriteLine("Step 1: Decomposing request into atomic subtasks...");
+            var decompositionRequest = new TaskDecompositionRequest
+            {
+                OriginalRequest = userRequest,
+                Context = context
+            };
+            var decomposition = await _openAIService.DecomposeTaskAsync(decompositionRequest);
+            result.Tasks = decomposition.Tasks;
+            result.Description = decomposition.Description;
+
+            // Review tasks with user and handle uncertainties
+            result.Tasks = await _userInteractionService.ReviewTasksWithUserAsync(result.Tasks);
+
+            Console.WriteLine($"Decomposed into {decomposition.Tasks.Count} tasks:");
+            foreach (var task in decomposition.Tasks)
+            {
+                var deps = task.Dependencies.Any() ? string.Join(", ", task.Dependencies) : "None";
+                Console.WriteLine($"  - {task.Id}: {task.Description} [Dependencies: {deps}]");
+            }
+
+            // Step 2: Execute tasks in parallel (respecting dependencies)
+            Console.WriteLine("\nStep 2: Executing tasks in parallel...");
+            result.Tasks = await _executionEngine.ExecuteTasksAsync(decomposition.Tasks);
+
+            // Step 3: Validate contracts
+            Console.WriteLine("\nStep 3: Validating contracts...");
+            var contractValidation = _mergerService.ValidateContracts(result.Tasks);
+            if (!contractValidation.IsValid)
+            {
+                result.Success = false;
+                result.ErrorMessage = $"Contract validation failed: {string.Join(", ", contractValidation.Errors)}";
+                return result;
+            }
+
+            // Step 4: Merge code snippets
+            Console.WriteLine("\nStep 4: Merging code snippets...");
+            result.FinalCode = await _mergerService.MergeCodeSnippetsAsync(result.Tasks);
+
+            // Step 5: Generate execution report
+            Console.WriteLine("\nStep 5: Generating execution report...");
+            result.ExecutionReport = _mergerService.CreateExecutionReport(result.Tasks, result.FinalCode);
+
+            result.Success = true;
+            Console.WriteLine("\n✓ AoT Engine execution completed successfully!");
+        }
+        catch (Exception ex)
+        {
+            result.Success = false;
+            result.ErrorMessage = ex.Message;
+            Console.WriteLine($"\n✗ AoT Engine execution failed: {ex.Message}");
+            
+            // Log full exception details for diagnostics (stack trace, inner exceptions, etc.)
+            Console.Error.WriteLine("\nDetailed exception information:");
+            Console.Error.WriteLine(ex.ToString());
+        }
+
+        return result;
+    }
+}
+
+/// <summary>
+/// Result of an AoT Engine execution.
+/// </summary>
+public class AoTResult
+{
+    /// <summary>
+    /// The original user request.
+    /// </summary>
+    public string OriginalRequest { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Description of the decomposition.
+    /// </summary>
+    public string Description { get; set; } = string.Empty;
+
+    /// <summary>
+    /// List of executed tasks.
+    /// </summary>
+    public List<TaskNode> Tasks { get; set; } = new();
+
+    /// <summary>
+    /// Final merged code.
+    /// </summary>
+    public string FinalCode { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Execution report.
+    /// </summary>
+    public string ExecutionReport { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Indicates whether execution was successful.
+    /// </summary>
+    public bool Success { get; set; }
+
+    /// <summary>
+    /// Error message if execution failed.
+    /// </summary>
+    public string ErrorMessage { get; set; } = string.Empty;
+}
