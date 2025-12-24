@@ -147,14 +147,25 @@ if (result.Success)
         }
         
         var buildService = new ProjectBuildService();
-        var buildResult = await buildService.CreateAndValidateProjectAsync(outputDirectory, projectName, result.FinalCode);
+        
+        // Use the new method that creates separate files and adds package references dynamically
+        // This analyzes the generated code and extracts required packages before creating the project
+        var buildResult = await buildService.CreateProjectFromTasksAsync(outputDirectory, projectName, result.Tasks);
         
         if (buildResult.Success)
         {
             Console.WriteLine($"\n🎉 Project created successfully at: {buildResult.ProjectPath}");
+            if (buildResult.GeneratedFiles.Any())
+            {
+                Console.WriteLine($"   📄 Generated files:");
+                foreach (var file in buildResult.GeneratedFiles)
+                {
+                    Console.WriteLine($"      - {Path.GetFileName(file)}");
+                }
+            }
             if (!string.IsNullOrEmpty(buildResult.OutputAssemblyPath))
             {
-                Console.WriteLine($"   Assembly: {buildResult.OutputAssemblyPath}");
+                Console.WriteLine($"   🔧 Assembly: {buildResult.OutputAssemblyPath}");
             }
             
             // Ask if user wants to run the project

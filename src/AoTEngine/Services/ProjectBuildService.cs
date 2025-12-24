@@ -1,5 +1,7 @@
 using System.Diagnostics;
 using System.Text;
+using System.Text.RegularExpressions;
+using System.Xml.Linq;
 using AoTEngine.Models;
 
 namespace AoTEngine.Services;
@@ -9,6 +11,476 @@ namespace AoTEngine.Services;
 /// </summary>
 public class ProjectBuildService
 {
+    /// <summary>
+    /// Creates a new .NET project from a list of tasks, saving each task's code to separate files
+    /// and adding required package references dynamically.
+    /// </summary>
+    /// <param name="outputDirectory">Directory where the project should be created</param>
+    /// <param name="projectName">Name of the project</param>
+    /// <param name="tasks">List of completed tasks with generated code</param>
+    /// <returns>Build result with project creation and validation status</returns>
+    public async Task<ProjectBuildResult> CreateProjectFromTasksAsync(
+        string outputDirectory,
+        string projectName,
+        List<TaskNode> tasks)
+    {
+        var result = new ProjectBuildResult();
+
+        try
+        {
+            Console.WriteLine($"\n📦 Creating project '{projectName}' from {tasks.Count} task(s) at: {outputDirectory}");
+
+            // Create output directory if it doesn't exist
+            Directory.CreateDirectory(outputDirectory);
+
+            var projectPath = Path.Combine(outputDirectory, projectName);
+
+            // Clean up old project if it exists
+            if (Directory.Exists(projectPath))
+            {
+                Console.WriteLine($"   🗑️ Cleaning up existing project directory...");
+                Directory.Delete(projectPath, true);
+            }
+
+            Directory.CreateDirectory(projectPath);
+
+            // Step 1: Extract all required packages from tasks before creating the project
+            Console.WriteLine("   📋 Extracting required packages from generated code...");
+            var allPackages = ExtractRequiredPackagesFromTasks(tasks);
+            
+            if (allPackages.Any())
+            {
+                Console.WriteLine($"   📦 Found {allPackages.Count} required package(s): {string.Join(", ", allPackages.Keys)}");
+            }
+
+            // Step 2: Create new console project
+            Console.WriteLine("   🔧 Creating .NET console project...");
+            var createProcessInfo = new ProcessStartInfo
+            {
+                FileName = "dotnet",
+                Arguments = $"new console -n {projectName} -o \"{projectPath}\" --force",
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+
+            using (var createProcess = new Process { StartInfo = createProcessInfo })
+            {
+                createProcess.Start();
+                var output = await createProcess.StandardOutput.ReadToEndAsync();
+                var error = await createProcess.StandardError.ReadToEndAsync();
+                await createProcess.WaitForExitAsync();
+
+                if (createProcess.ExitCode != 0)
+                {
+                    result.Success = false;
+                    result.ErrorMessage = $"Failed to create project: {error}";
+                    return result;
+                }
+            }
+
+            Console.WriteLine("   ✓ Project created");
+
+            // Step 3: Add package references to .csproj file
+            if (allPackages.Any())
+            {
+                Console.WriteLine("   📦 Adding package references to project...");
+                var csprojPath = Path.Combine(projectPath, $"{projectName}.csproj");
+                await AddPackageReferencesToCsprojAsync(csprojPath, allPackages);
+                Console.WriteLine($"   ✓ Added {allPackages.Count} package reference(s)");
+            }
+
+            // Step 4: Save each task's code to separate files
+            Console.WriteLine("   📁 Saving generated code to separate files...");
+            var generatedFiles = await SaveTaskCodeToFilesAsync(projectPath, tasks);
+            Console.WriteLine($"   ✓ Created {generatedFiles.Count} code file(s)");
+
+            // Step 5: Create a minimal Program.cs entry point if not already generated
+            await CreateEntryPointIfNeededAsync(projectPath, tasks);
+
+            result.ProjectPath = projectPath;
+            result.ProgramFilePath = Path.Combine(projectPath, "Program.cs");
+            result.GeneratedFiles = generatedFiles;
+
+            // Step 6: Restore packages
+            Console.WriteLine("\n📥 Restoring packages...");
+            var restoreResult = await RestorePackagesAsync(projectPath);
+            if (!restoreResult.Success)
+            {
+                result.Success = false;
+                result.ErrorMessage = $"Package restore failed: {restoreResult.ErrorMessage}";
+                result.Errors = restoreResult.Errors;
+                return result;
+            }
+            Console.WriteLine("   ✓ Packages restored");
+
+            // Step 7: Build the project to validate
+            Console.WriteLine("\n🔨 Building project to validate code...");
+            var buildResult = await BuildProjectAsync(projectPath);
+
+            result.Success = buildResult.Success;
+            result.BuildOutput = buildResult.BuildOutput;
+            result.ErrorMessage = buildResult.ErrorMessage;
+            result.OutputAssemblyPath = buildResult.OutputAssemblyPath;
+            result.Errors = buildResult.Errors;
+            result.Warnings = buildResult.Warnings;
+
+            if (result.Success)
+            {
+                Console.WriteLine("✓ Project built successfully!");
+            }
+            else
+            {
+                Console.WriteLine($"✗ Project build failed!");
+            }
+        }
+        catch (Exception ex)
+        {
+            result.Success = false;
+            result.ErrorMessage = $"Project creation exception: {ex.Message}";
+            Console.WriteLine($"\n✗ Project creation error: {ex.Message}");
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Extracts required packages from all tasks, including packages specified in RequiredPackages
+    /// and packages detected from using statements in generated code.
+    /// </summary>
+    private Dictionary<string, string> ExtractRequiredPackagesFromTasks(List<TaskNode> tasks)
+    {
+        var packages = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+        // Common package mappings for NuGet packages based on using statements
+        var usingToPackageMap = new Dictionary<string, (string PackageName, string Version)>(StringComparer.OrdinalIgnoreCase)
+        {
+            // Microsoft.Extensions packages
+            { "Microsoft.Extensions.DependencyInjection", ("Microsoft.Extensions.DependencyInjection", "9.0.0") },
+            { "Microsoft.Extensions.Logging", ("Microsoft.Extensions.Logging", "9.0.0") },
+            { "Microsoft.Extensions.Configuration", ("Microsoft.Extensions.Configuration", "9.0.0") },
+            { "Microsoft.Extensions.Hosting", ("Microsoft.Extensions.Hosting", "9.0.0") },
+            { "Microsoft.Extensions.Http", ("Microsoft.Extensions.Http", "9.0.0") },
+            { "Microsoft.Extensions.Options", ("Microsoft.Extensions.Options", "9.0.0") },
+            { "Microsoft.Extensions.Caching", ("Microsoft.Extensions.Caching.Memory", "9.0.0") },
+            
+            // Entity Framework Core
+            { "Microsoft.EntityFrameworkCore", ("Microsoft.EntityFrameworkCore", "9.0.0") },
+            
+            // JSON
+            { "Newtonsoft.Json", ("Newtonsoft.Json", "13.0.4") },
+            { "System.Text.Json", ("System.Text.Json", "9.0.0") },
+            
+            // Popular libraries
+            { "Dapper", ("Dapper", "2.1.35") },
+            { "AutoMapper", ("AutoMapper", "13.0.1") },
+            { "FluentValidation", ("FluentValidation", "11.11.0") },
+            { "Serilog", ("Serilog", "4.2.0") },
+            { "Polly", ("Polly", "8.5.0") },
+            
+            // Roslyn
+            { "Microsoft.CodeAnalysis", ("Microsoft.CodeAnalysis.CSharp", "4.11.0") },
+        };
+
+        foreach (var task in tasks.Where(t => !string.IsNullOrWhiteSpace(t.GeneratedCode)))
+        {
+            // Add explicitly specified packages from RequiredPackages
+            if (task.RequiredPackages != null)
+            {
+                foreach (var package in task.RequiredPackages)
+                {
+                    // Parse package specification (e.g., "Newtonsoft.Json" or "Newtonsoft.Json:13.0.4")
+                    var parts = package.Split(':');
+                    var packageName = parts[0].Trim();
+                    var version = parts.Length > 1 ? parts[1].Trim() : "latest";
+
+                    if (!packages.ContainsKey(packageName))
+                    {
+                        packages[packageName] = version;
+                    }
+                }
+            }
+
+            // Extract packages from using statements in generated code
+            var usings = ExtractUsingStatements(task.GeneratedCode);
+            foreach (var usingStatement in usings)
+            {
+                // Check if this using statement maps to a known package
+                foreach (var mapping in usingToPackageMap)
+                {
+                    if (usingStatement.StartsWith(mapping.Key, StringComparison.OrdinalIgnoreCase))
+                    {
+                        if (!packages.ContainsKey(mapping.Value.PackageName))
+                        {
+                            packages[mapping.Value.PackageName] = mapping.Value.Version;
+                        }
+                        break;
+                    }
+                }
+            }
+        }
+
+        return packages;
+    }
+
+    /// <summary>
+    /// Extracts using statements from code.
+    /// </summary>
+    private List<string> ExtractUsingStatements(string code)
+    {
+        var usings = new List<string>();
+        var regex = new Regex(@"^using\s+([A-Za-z0-9_.]+);", RegexOptions.Multiline);
+        var matches = regex.Matches(code);
+
+        foreach (Match match in matches)
+        {
+            if (match.Groups.Count > 1)
+            {
+                usings.Add(match.Groups[1].Value);
+            }
+        }
+
+        return usings;
+    }
+
+    /// <summary>
+    /// Adds package references to the .csproj file.
+    /// </summary>
+    private async Task AddPackageReferencesToCsprojAsync(string csprojPath, Dictionary<string, string> packages)
+    {
+        if (!File.Exists(csprojPath))
+        {
+            throw new FileNotFoundException($"Project file not found: {csprojPath}");
+        }
+
+        var doc = XDocument.Load(csprojPath);
+        var projectElement = doc.Root;
+
+        if (projectElement == null)
+        {
+            throw new InvalidOperationException("Invalid .csproj file structure");
+        }
+
+        // Find or create ItemGroup for package references
+        var itemGroup = projectElement.Elements("ItemGroup")
+            .FirstOrDefault(ig => ig.Elements("PackageReference").Any());
+
+        if (itemGroup == null)
+        {
+            itemGroup = new XElement("ItemGroup");
+            projectElement.Add(itemGroup);
+        }
+
+        // Get existing package references to avoid duplicates
+        var existingPackages = itemGroup.Elements("PackageReference")
+            .Select(pr => pr.Attribute("Include")?.Value)
+            .Where(v => v != null)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        // Add new package references
+        foreach (var package in packages)
+        {
+            if (!existingPackages.Contains(package.Key))
+            {
+                var packageRef = new XElement("PackageReference",
+                    new XAttribute("Include", package.Key),
+                    new XAttribute("Version", package.Value == "latest" ? "*" : package.Value));
+                itemGroup.Add(packageRef);
+            }
+        }
+
+        await File.WriteAllTextAsync(csprojPath, doc.ToString());
+    }
+
+    /// <summary>
+    /// Saves each task's code to a separate file based on the types defined in the code.
+    /// </summary>
+    private async Task<List<string>> SaveTaskCodeToFilesAsync(string projectPath, List<TaskNode> tasks)
+    {
+        var generatedFiles = new List<string>();
+
+        foreach (var task in tasks.Where(t => !string.IsNullOrWhiteSpace(t.GeneratedCode)))
+        {
+            // Generate filename based on task ID and expected types
+            var filename = GenerateFilenameForTask(task);
+            var filePath = Path.Combine(projectPath, filename);
+
+            // Handle namespace-based subdirectories
+            if (!string.IsNullOrEmpty(task.Namespace) && task.Namespace.Contains('.'))
+            {
+                var namespaceDir = task.Namespace.Replace('.', Path.DirectorySeparatorChar);
+                var dirPath = Path.Combine(projectPath, namespaceDir);
+                Directory.CreateDirectory(dirPath);
+                filePath = Path.Combine(dirPath, filename);
+            }
+
+            await File.WriteAllTextAsync(filePath, task.GeneratedCode);
+            generatedFiles.Add(filePath);
+            Console.WriteLine($"      📄 {Path.GetFileName(filePath)}");
+        }
+
+        return generatedFiles;
+    }
+
+    /// <summary>
+    /// Generates an appropriate filename for a task's code based on its content.
+    /// </summary>
+    private string GenerateFilenameForTask(TaskNode task)
+    {
+        // Try to extract the main type name from the code
+        var typeNameMatch = Regex.Match(
+            task.GeneratedCode,
+            @"(?:public|internal|private|protected)?\s*(?:static\s+)?(?:partial\s+)?(?:class|interface|struct|record|enum)\s+([A-Z][a-zA-Z0-9_]+)");
+
+        if (typeNameMatch.Success)
+        {
+            return $"{typeNameMatch.Groups[1].Value}.cs";
+        }
+
+        // Fallback to using expected types
+        if (task.ExpectedTypes.Any())
+        {
+            return $"{task.ExpectedTypes.First()}.cs";
+        }
+
+        // Fallback to task ID
+        return $"{SanitizeFilename(task.Id)}.cs";
+    }
+
+    /// <summary>
+    /// Sanitizes a string to be used as a filename.
+    /// </summary>
+    private string SanitizeFilename(string input)
+    {
+        var invalid = Path.GetInvalidFileNameChars();
+        return string.Join("_", input.Split(invalid, StringSplitOptions.RemoveEmptyEntries));
+    }
+
+    /// <summary>
+    /// Creates a minimal Program.cs entry point if the generated code doesn't include one.
+    /// </summary>
+    private async Task CreateEntryPointIfNeededAsync(string projectPath, List<TaskNode> tasks)
+    {
+        var programPath = Path.Combine(projectPath, "Program.cs");
+
+        // Check if any task already generated a Main method or top-level statements
+        var hasEntryPoint = tasks.Any(t => 
+            !string.IsNullOrWhiteSpace(t.GeneratedCode) &&
+            (t.GeneratedCode.Contains("static void Main") ||
+             t.GeneratedCode.Contains("static async Task Main") ||
+             Regex.IsMatch(t.GeneratedCode, @"^\s*Console\.", RegexOptions.Multiline) ||
+             Regex.IsMatch(t.GeneratedCode, @"^\s*await\s+", RegexOptions.Multiline)));
+
+        if (!hasEntryPoint)
+        {
+            // Create a minimal entry point that references the generated types
+            var entryPoint = GenerateMinimalEntryPoint(tasks);
+            await File.WriteAllTextAsync(programPath, entryPoint);
+            Console.WriteLine($"      📄 Program.cs (entry point)");
+        }
+    }
+
+    /// <summary>
+    /// Generates a minimal entry point that demonstrates the generated types.
+    /// </summary>
+    private string GenerateMinimalEntryPoint(List<TaskNode> tasks)
+    {
+        var sb = new StringBuilder();
+        var namespaces = new HashSet<string>();
+
+        // Collect namespaces from tasks
+        foreach (var task in tasks)
+        {
+            if (!string.IsNullOrEmpty(task.Namespace))
+            {
+                namespaces.Add(task.Namespace);
+            }
+        }
+
+        // Add using statements
+        sb.AppendLine("// Auto-generated entry point");
+        sb.AppendLine("using System;");
+        foreach (var ns in namespaces.OrderBy(n => n))
+        {
+            sb.AppendLine($"using {ns};");
+        }
+        sb.AppendLine();
+
+        // Generate a simple entry point
+        sb.AppendLine("// Main entry point");
+        sb.AppendLine("Console.WriteLine(\"Generated application is running.\");");
+        sb.AppendLine();
+        
+        // Add comments about available types
+        sb.AppendLine("// Available types from generated code:");
+        foreach (var task in tasks.Where(t => t.ExpectedTypes.Any()))
+        {
+            foreach (var type in task.ExpectedTypes)
+            {
+                sb.AppendLine($"// - {type}");
+            }
+        }
+
+        return sb.ToString();
+    }
+
+    /// <summary>
+    /// Restores NuGet packages for the project.
+    /// </summary>
+    private async Task<ProjectBuildResult> RestorePackagesAsync(string projectPath)
+    {
+        var result = new ProjectBuildResult();
+
+        var processStartInfo = new ProcessStartInfo
+        {
+            FileName = "dotnet",
+            Arguments = $"restore \"{projectPath}\"",
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true
+        };
+
+        var output = new StringBuilder();
+        var errors = new List<string>();
+
+        using var process = new Process { StartInfo = processStartInfo };
+
+        process.OutputDataReceived += (sender, e) =>
+        {
+            if (!string.IsNullOrEmpty(e.Data))
+            {
+                output.AppendLine(e.Data);
+            }
+        };
+
+        process.ErrorDataReceived += (sender, e) =>
+        {
+            if (!string.IsNullOrEmpty(e.Data))
+            {
+                errors.Add(e.Data);
+            }
+        };
+
+        process.Start();
+        process.BeginOutputReadLine();
+        process.BeginErrorReadLine();
+
+        await process.WaitForExitAsync();
+
+        result.Success = process.ExitCode == 0;
+        result.BuildOutput = output.ToString();
+        result.Errors = errors;
+        
+        if (!result.Success)
+        {
+            result.ErrorMessage = $"Restore failed with exit code {process.ExitCode}";
+        }
+
+        return result;
+    }
+
     /// <summary>
     /// Creates a new .NET console project with generated code and validates it by building.
     /// </summary>
@@ -301,4 +773,9 @@ public class ProjectBuildResult
     /// Error message if build failed.
     /// </summary>
     public string ErrorMessage { get; set; } = string.Empty;
+    
+    /// <summary>
+    /// List of generated code files.
+    /// </summary>
+    public List<string> GeneratedFiles { get; set; } = new List<string>();
 }
