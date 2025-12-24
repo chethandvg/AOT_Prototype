@@ -24,9 +24,19 @@ public class CodeValidatorService
             MetadataReference.CreateFromFile(typeof(System.Linq.Enumerable).Assembly.Location),
             MetadataReference.CreateFromFile(Assembly.Load("System.Runtime").Location),
             MetadataReference.CreateFromFile(Assembly.Load("System.Collections").Location),
-            MetadataReference.CreateFromFile(Assembly.Load("System.Text.RegularExpressions").Location),
-            MetadataReference.CreateFromFile(Assembly.Load("netstandard").Location)
+            MetadataReference.CreateFromFile(Assembly.Load("System.Text.RegularExpressions").Location)
         };
+
+        // Try to add netstandard reference, but don't fail if unavailable
+        try
+        {
+            _references.Add(MetadataReference.CreateFromFile(Assembly.Load("netstandard").Location));
+        }
+        catch (FileNotFoundException)
+        {
+            // netstandard may not be available in all .NET runtime environments
+            // Continue without it as the other references should be sufficient
+        }
     }
 
     /// <summary>

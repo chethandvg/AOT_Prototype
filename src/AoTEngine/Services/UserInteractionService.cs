@@ -167,7 +167,6 @@ public class UserInteractionService
             if (lowerDesc.Contains(term.Key))
             {
                 uncertainties.Add(term.Value);
-                break; // Only ask about the first uncertainty to avoid overwhelming the user
             }
         }
         

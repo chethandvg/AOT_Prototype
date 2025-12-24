@@ -1,5 +1,6 @@
 using AoTEngine.Models;
 using AoTEngine.Services;
+using Newtonsoft.Json;
 
 namespace AoTEngine.Core;
 
@@ -129,6 +130,18 @@ public class ParallelExecutionEngine
                             $"Task {task.Id} failed validation after {MaxRetries} attempts. Errors: {string.Join(", ", validationResult.Errors)}");
                     }
                 }
+            }
+            catch (HttpRequestException ex) when (attempt < MaxRetries - 1)
+            {
+                Console.WriteLine($"HTTP error executing task {task.Id} (attempt {attempt + 1}): {ex.Message}");
+                task.RetryCount++;
+                await Task.Delay(1000 * (attempt + 1));
+            }
+            catch (JsonException ex) when (attempt < MaxRetries - 1)
+            {
+                Console.WriteLine($"JSON parsing error executing task {task.Id} (attempt {attempt + 1}): {ex.Message}");
+                task.RetryCount++;
+                await Task.Delay(1000 * (attempt + 1));
             }
             catch (Exception ex) when (attempt < MaxRetries - 1)
             {
