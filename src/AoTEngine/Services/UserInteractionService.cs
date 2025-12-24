@@ -118,6 +118,87 @@ public class UserInteractionService
     }
 
     /// <summary>
+    /// Handles uncertainties for multiple tasks in a batch to improve UX.
+    /// Collects all uncertainties upfront and prompts the user once for all questions.
+    /// </summary>
+    public async Task<List<TaskNode>> HandleMultipleTaskUncertaintiesAsync(List<TaskNode> tasks)
+    {
+        var allQuestions = new List<(TaskNode Task, string Question, string Context)>();
+        
+        // Phase 1: Collect all uncertainties from all tasks
+        foreach (var task in tasks)
+        {
+            var uncertainties = DetectUncertainties(task.Description);
+            var context = $"Task ID: {task.Id}\nDescription: {task.Description}";
+            
+            foreach (var uncertainty in uncertainties)
+            {
+                allQuestions.Add((task, uncertainty, context));
+            }
+        }
+        
+        if (!allQuestions.Any())
+        {
+            return tasks;
+        }
+        
+        // Group identical questions together
+        var questionGroups = allQuestions
+            .GroupBy(q => q.Question)
+            .Select(g => new 
+            { 
+                Question = g.Key, 
+                Tasks = g.Select(x => x.Task).ToList(),
+                FirstContext = g.First().Context 
+            })
+            .ToList();
+        
+        // Phase 2: Display unique questions and collect answers
+        Console.WriteLine();
+        Console.WriteLine("═══════════════════════════════════════════════════════");
+        Console.WriteLine($"⚠️  {questionGroups.Count} UNIQUE UNCERTAINTIES DETECTED - User Input Required");
+        Console.WriteLine("═══════════════════════════════════════════════════════");
+        Console.WriteLine();
+        Console.WriteLine($"Found uncertainties in {allQuestions.Select(q => q.Task.Id).Distinct().Count()} task(s).");
+        Console.WriteLine($"Total questions reduced from {allQuestions.Count} to {questionGroups.Count} (duplicates removed).");
+        Console.WriteLine("Please answer all questions below:");
+        Console.WriteLine();
+        
+        var answerMap = new Dictionary<string, string>();
+        
+        for (int i = 0; i < questionGroups.Count; i++)
+        {
+            var group = questionGroups[i];
+            var taskIds = string.Join(", ", group.Tasks.Select(t => t.Id));
+            
+            Console.WriteLine($"┌─ [{i + 1}/{questionGroups.Count}] Applies to {group.Tasks.Count} task(s): {taskIds}");
+            Console.WriteLine($"├─────────────────────────────────────────────────────");
+            Console.WriteLine($"│ {group.Question}");
+            Console.WriteLine($"└─────────────────────────────────────────────────────");
+            Console.Write("Your response: ");
+            
+            var answer = Console.ReadLine() ?? string.Empty;
+            answerMap[group.Question] = answer;
+            
+            Console.WriteLine();
+        }
+        
+        // Phase 3: Apply answers to all relevant tasks
+        foreach (var (task, question, _) in allQuestions)
+        {
+            var answer = answerMap[question];
+            task.Context += $"\n\nClarification for '{question}':\n{answer}";
+        }
+        
+        Console.WriteLine("═══════════════════════════════════════════════════════");
+        Console.WriteLine($"✓ All {questionGroups.Count} uncertainties resolved and applied to {tasks.Count} task(s)");
+        Console.WriteLine("═══════════════════════════════════════════════════════");
+        Console.WriteLine();
+        
+        return tasks;
+    }
+
+    /// <summary>
     /// Detects uncertainties in task descriptions and prompts user for clarification.
     /// </summary>
     public async Task<TaskNode> HandleTaskUncertaintyAsync(TaskNode task)

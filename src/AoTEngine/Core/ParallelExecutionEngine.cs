@@ -29,6 +29,9 @@ public class ParallelExecutionEngine
     /// </summary>
     public async Task<List<TaskNode>> ExecuteTasksAsync(List<TaskNode> tasks)
     {
+        // Handle all uncertainties upfront before execution
+        await _userInteractionService.HandleMultipleTaskUncertaintiesAsync(tasks);
+        
         var completedTasks = new Dictionary<string, TaskNode>();
 
         while (completedTasks.Count < tasks.Count)
@@ -83,9 +86,6 @@ public class ParallelExecutionEngine
     private async Task<TaskNode> ExecuteTaskWithValidationAsync(TaskNode task, Dictionary<string, TaskNode> completedTasks)
     {
         Console.WriteLine($"Executing task: {task.Id} - {task.Description}");
-
-        // Handle uncertainties in the task before execution
-        task = await _userInteractionService.HandleTaskUncertaintyAsync(task);
 
         for (int attempt = 0; attempt < MaxRetries; attempt++)
         {

@@ -4,6 +4,7 @@ using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.Emit;
 using System.Reflection;
 using System.Runtime.Loader;
+using System.Text.Json;
 
 namespace AoTEngine.Services;
 
@@ -29,6 +30,9 @@ public class CodeValidatorService
         TryAddAssemblyReference("System.Collections");
         TryAddAssemblyReference("System.Text.RegularExpressions");
         TryAddAssemblyReference("netstandard");
+        
+        // Add System.Text.Json assembly reference for JSON support
+        TryAddTypeReference(typeof(JsonSerializer));
     }
 
     private void TryAddAssemblyReference(string assemblyName)
@@ -47,6 +51,18 @@ public class CodeValidatorService
         {
             // Log but don't fail on assembly loading errors
             Console.WriteLine($"Warning: Could not load assembly {assemblyName}: {ex.Message}");
+        }
+    }
+
+    private void TryAddTypeReference(Type type)
+    {
+        try
+        {
+            _references.Add(MetadataReference.CreateFromFile(type.Assembly.Location));
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Warning: Could not load assembly for type {type.FullName}: {ex.Message}");
         }
     }
 
