@@ -22,13 +22,47 @@ if (string.IsNullOrEmpty(apiKey))
 Console.WriteLine("=== AoT Engine - Atom of Thought Prototype ===");
 Console.WriteLine();
 
-// Initialize services
+// Ask for output directory upfront
+Console.WriteLine("📁 Enter output directory for generated code and project files:");
+Console.WriteLine("   (Press Enter to use default: './GeneratedProjects')");
+var outputDirectory = Console.ReadLine()?.Trim();
+
+if (string.IsNullOrWhiteSpace(outputDirectory))
+{
+    outputDirectory = Path.Combine(Directory.GetCurrentDirectory(), "GeneratedProjects");
+    Console.WriteLine($"   Using default: {outputDirectory}");
+}
+else
+{
+    // Expand relative paths
+    if (!Path.IsPathRooted(outputDirectory))
+    {
+        outputDirectory = Path.GetFullPath(outputDirectory);
+    }
+    Console.WriteLine($"   Using: {outputDirectory}");
+}
+
+// Validate/create output directory
+try
+{
+    Directory.CreateDirectory(outputDirectory);
+    Console.WriteLine($"   ✓ Output directory ready");
+}
+catch (Exception ex)
+{
+    Console.WriteLine($"Error: Cannot create output directory: {ex.Message}");
+    return;
+}
+
+Console.WriteLine();
+
+// Initialize services with configuration
 var openAIService = new OpenAIService(apiKey, model);
-var validatorService = new CodeValidatorService();
+var validatorService = new CodeValidatorService(configuration);
 var userInteractionService = new UserInteractionService();
 var executionEngine = new ParallelExecutionEngine(openAIService, validatorService, userInteractionService);
 var mergerService = new CodeMergerService(validatorService);
-var orchestrator = new AoTEngineOrchestrator(openAIService, executionEngine, mergerService, userInteractionService);
+var orchestrator = new AoTEngineOrchestrator(openAIService, executionEngine, mergerService, userInteractionService, validatorService);
 
 // Get user request
 Console.WriteLine("Enter your coding request (or press Enter for a demo):");
@@ -58,8 +92,28 @@ else
 
 Console.WriteLine();
 
-// Execute the AoT workflow
-var result = await orchestrator.ExecuteAsync(userRequest);
+// Execute the AoT workflow with validation mode from configuration
+var useHybridValidation = configuration.GetValue<bool>("Engine:UseHybridValidation", true);
+var useBatchValidation = configuration.GetValue<bool>("Engine:UseBatchValidation", true);
+
+if (useHybridValidation)
+{
+    Console.WriteLine("Using hybrid validation mode (individual + batch)");
+}
+else if (useBatchValidation)
+{
+    Console.WriteLine("Using batch validation mode");
+}
+else
+{
+    Console.WriteLine("Using individual validation mode");
+}
+
+var result = await orchestrator.ExecuteAsync(
+    userRequest, 
+    useBatchValidation: useBatchValidation, 
+    useHybridValidation: useHybridValidation,
+    outputDirectory: outputDirectory);
 
 // Display results
 Console.WriteLine();
@@ -72,10 +126,76 @@ if (result.Success)
     Console.WriteLine(result.FinalCode);
     Console.WriteLine();
 
-    // Optionally save to file
-    var outputPath = Path.Combine(Directory.GetCurrentDirectory(), "generated_code.cs");
-    await File.WriteAllTextAsync(outputPath, result.FinalCode);
-    Console.WriteLine($"Code saved to: {outputPath}");
+    // Save to file in the output directory
+    var codeFilePath = Path.Combine(outputDirectory, "generated_code.cs");
+    await File.WriteAllTextAsync(codeFilePath, result.FinalCode);
+    Console.WriteLine($"Code saved to: {codeFilePath}");
+    
+    // Ask if user wants to create a standalone project
+    Console.WriteLine();
+    Console.WriteLine("Would you like to create a standalone runnable project? (y/n):");
+    var createProject = Console.ReadLine()?.Trim().ToLower();
+    
+    if (createProject == "y" || createProject == "yes")
+    {
+        Console.WriteLine("Enter project name (or press Enter for 'GeneratedApp'):");
+        var projectName = Console.ReadLine()?.Trim();
+        
+        if (string.IsNullOrWhiteSpace(projectName))
+        {
+            projectName = "GeneratedApp";
+        }
+        
+        var buildService = new ProjectBuildService();
+        var buildResult = await buildService.CreateAndValidateProjectAsync(outputDirectory, projectName, result.FinalCode);
+        
+        if (buildResult.Success)
+        {
+            Console.WriteLine($"\n🎉 Project created successfully at: {buildResult.ProjectPath}");
+            if (!string.IsNullOrEmpty(buildResult.OutputAssemblyPath))
+            {
+                Console.WriteLine($"   Assembly: {buildResult.OutputAssemblyPath}");
+            }
+            
+            // Ask if user wants to run the project
+            Console.WriteLine();
+            Console.WriteLine("Would you like to run the project? (y/n):");
+            var runProject = Console.ReadLine()?.Trim().ToLower();
+            
+            if (runProject == "y" || runProject == "yes")
+            {
+                Console.WriteLine("\n▶️  Running project...");
+                Console.WriteLine("─────────────────────────────────────────");
+                
+                var runProcess = new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = "dotnet",
+                    Arguments = $"run --project \"{buildResult.ProjectPath}\"",
+                    UseShellExecute = false
+                };
+                
+                var process = System.Diagnostics.Process.Start(runProcess);
+                if (process != null)
+                {
+                    await process.WaitForExitAsync();
+                    Console.WriteLine("─────────────────────────────────────────");
+                    Console.WriteLine($"Process exited with code: {process.ExitCode}");
+                }
+            }
+        }
+        else
+        {
+            Console.WriteLine($"\n❌ Project creation/build failed: {buildResult.ErrorMessage}");
+            if (buildResult.Errors.Any())
+            {
+                Console.WriteLine("\nBuild Errors:");
+                foreach (var error in buildResult.Errors.Take(10))
+                {
+                    Console.WriteLine($"   {error}");
+                }
+            }
+        }
+    }
 }
 else
 {

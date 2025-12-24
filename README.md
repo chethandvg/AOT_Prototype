@@ -5,6 +5,13 @@
 
 The AoT Engine is a sophisticated C# application that leverages OpenAI's GPT models to decompose complex programming tasks into atomic subtasks, execute them in parallel, validate the generated code, and merge the results into a complete solution.
 
+## 📚 Documentation
+
+- **[README.md](README.md)** - This file: Project overview and quick start guide
+- **[ARCHITECTURE.md](ARCHITECTURE.md)** - Detailed system architecture and technical design
+- **[USAGE.md](USAGE.md)** - Comprehensive usage examples and scenarios
+- **[CHANGELOG.md](CHANGELOG.md)** - Complete feature reference and version history
+
 ## Features
 
 ### 1. **Task Decomposition**

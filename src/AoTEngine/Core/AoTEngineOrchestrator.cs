@@ -12,23 +12,31 @@ public class AoTEngineOrchestrator
     private readonly ParallelExecutionEngine _executionEngine;
     private readonly CodeMergerService _mergerService;
     private readonly UserInteractionService _userInteractionService;
+    private readonly CodeValidatorService _validatorService;
 
     public AoTEngineOrchestrator(
         OpenAIService openAIService,
         ParallelExecutionEngine executionEngine,
         CodeMergerService mergerService,
-        UserInteractionService userInteractionService)
+        UserInteractionService userInteractionService,
+        CodeValidatorService validatorService)
     {
         _openAIService = openAIService;
         _executionEngine = executionEngine;
         _mergerService = mergerService;
         _userInteractionService = userInteractionService;
+        _validatorService = validatorService;
     }
 
     /// <summary>
     /// Executes the complete AoT workflow.
     /// </summary>
-    public async Task<AoTResult> ExecuteAsync(string userRequest, string context = "")
+    public async Task<AoTResult> ExecuteAsync(
+        string userRequest, 
+        string context = "", 
+        bool useBatchValidation = true, 
+        bool useHybridValidation = false,
+        string? outputDirectory = null)
     {
         var result = new AoTResult { OriginalRequest = userRequest };
 
@@ -55,9 +63,41 @@ public class AoTEngineOrchestrator
                 Console.WriteLine($"  - {task.Id}: {task.Description} [Dependencies: {deps}]");
             }
 
-            // Step 2: Execute tasks in parallel (respecting dependencies)
-            Console.WriteLine("\nStep 2: Executing tasks in parallel...");
-            result.Tasks = await _executionEngine.ExecuteTasksAsync(decomposition.Tasks);
+            // Step 2: Execute tasks - choose validation mode
+            // Create a new execution engine instance with output directory if using batch/hybrid validation
+            ParallelExecutionEngine executionEngine;
+            
+            if ((useHybridValidation || useBatchValidation) && !string.IsNullOrEmpty(outputDirectory))
+            {
+                Console.WriteLine($"\n📁 Output directory for build validation: {outputDirectory}");
+                var buildService = new ProjectBuildService();
+                executionEngine = new ParallelExecutionEngine(
+                    _openAIService, 
+                    _validatorService,
+                    _userInteractionService,
+                    buildService,
+                    outputDirectory);
+            }
+            else
+            {
+                executionEngine = _executionEngine;
+            }
+            
+            if (useHybridValidation)
+            {
+                Console.WriteLine("\nStep 2: Executing tasks with hybrid validation (individual + batch)...");
+                result.Tasks = await executionEngine.ExecuteTasksWithHybridValidationAsync(decomposition.Tasks);
+            }
+            else if (useBatchValidation)
+            {
+                Console.WriteLine("\nStep 2: Executing tasks with batch validation (inter-references will be resolved)...");
+                result.Tasks = await executionEngine.ExecuteTasksWithBatchValidationAsync(decomposition.Tasks);
+            }
+            else
+            {
+                Console.WriteLine("\nStep 2: Executing tasks in parallel with individual validation...");
+                result.Tasks = await _executionEngine.ExecuteTasksAsync(decomposition.Tasks);
+            }
 
             // Step 3: Validate contracts
             Console.WriteLine("\nStep 3: Validating contracts...");
@@ -67,6 +107,31 @@ public class AoTEngineOrchestrator
                 result.Success = false;
                 result.ErrorMessage = $"Contract validation failed: {string.Join(", ", contractValidation.Errors)}";
                 return result;
+            }
+
+            // Step 3.5: Validate integration across tasks (skip if batch or hybrid validation was used)
+            if (!useBatchValidation && !useHybridValidation)
+            {
+                Console.WriteLine("\nStep 3.5: Validating code integration...");
+                var integrationValidation = _validatorService.ValidateIntegration(result.Tasks);
+                if (!integrationValidation.IsValid)
+                {
+                    result.Success = false;
+                    result.ErrorMessage = $"Integration validation failed: {string.Join(", ", integrationValidation.Errors)}";
+                    return result;
+                }
+                if (integrationValidation.Warnings.Any())
+                {
+                    Console.WriteLine("⚠️  Integration warnings:");
+                    foreach (var warning in integrationValidation.Warnings)
+                    {
+                        Console.WriteLine($"   {warning}");
+                    }
+                }
+            }
+            else
+            {
+                Console.WriteLine("\nStep 3.5: Skipping integration validation (already done in batch/hybrid validation)");
             }
 
             // Step 4: Merge code snippets

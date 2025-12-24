@@ -49,4 +49,29 @@ public class TaskNode
     /// Number of retry attempts made for this task.
     /// </summary>
     public int RetryCount { get; set; }
+
+    /// <summary>
+    /// Expected namespace for this task's code.
+    /// </summary>
+    public string Namespace { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Expected type names to be generated in this task.
+    /// </summary>
+    public List<string> ExpectedTypes { get; set; } = new();
+
+    /// <summary>
+    /// Type signatures extracted from generated code (interfaces, public APIs).
+    /// </summary>
+    public string TypeContract { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Required NuGet packages or assemblies for this task.
+    /// </summary>
+    public List<string> RequiredPackages { get; set; } = new();
+
+    /// <summary>
+    /// Types consumed from dependent tasks. Key: task ID, Value: list of type names.
+    /// </summary>
+    public Dictionary<string, List<string>> ConsumedTypes { get; set; } = new();
 }
