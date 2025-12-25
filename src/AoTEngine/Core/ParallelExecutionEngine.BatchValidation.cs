@@ -63,6 +63,7 @@ public partial class ParallelExecutionEngine
             foreach (var task in results)
             {
                 task.IsCompleted = true;
+                task.CompletedAtUtc = DateTime.UtcNow;
                 completedTasks[task.Id] = task;
             }
 

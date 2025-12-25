@@ -134,7 +134,7 @@ public class CheckpointService
                 GeneratedCode = task.GeneratedCode,
                 ValidationStatus = task.IsValidated ? "validated" : "pending",
                 ValidationAttempts = task.ValidationAttemptCount > 0 ? task.ValidationAttemptCount : task.RetryCount + 1,
-                CompletedAt = DateTime.UtcNow,
+                CompletedAt = task.CompletedAtUtc ?? checkpoint.CheckpointTimestamp,
                 Summary = task.Summary
             });
         }

@@ -94,4 +94,9 @@ public class TaskNode
     /// UTC timestamp when the summary was generated.
     /// </summary>
     public DateTime? SummaryGeneratedAtUtc { get; set; }
+
+    /// <summary>
+    /// UTC timestamp when the task was completed.
+    /// </summary>
+    public DateTime? CompletedAtUtc { get; set; }
 }

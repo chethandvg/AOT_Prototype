@@ -40,27 +40,12 @@ public class CheckpointIntegrationTests
                 "Test project",
                 "A test project for checkpoint verification");
             
-            // Create simple tasks (we won't actually execute them)
-            var tasks = new List<TaskNode>
-            {
-                new TaskNode
-                {
-                    Id = "task1",
-                    Description = "Test task 1",
-                    GeneratedCode = "public class Test1 { }",
-                    IsCompleted = true,
-                    IsValidated = true,
-                    Namespace = "TestNamespace"
-                }
-            };
+            // Verify checkpoint service is properly initialized
+            Assert.NotNull(executionEngine);
             
             // Verify checkpoint directory doesn't exist yet
             var checkpointsDir = Path.Combine(tempDir, "checkpoints");
             Assert.False(Directory.Exists(checkpointsDir), "Checkpoints directory should not exist before execution");
-            
-            // Note: We cannot actually execute tasks without a valid OpenAI API key
-            // Instead, we'll verify that the checkpoint service is properly initialized
-            Assert.NotNull(executionEngine);
         }
         finally
         {

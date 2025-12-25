@@ -222,4 +222,145 @@ public class CheckpointServiceTests
         // Assert
         Assert.Null(result);
     }
+    
+    [Fact]
+    public async Task SaveCheckpointAsync_CategorizesTasksCorrectly()
+    {
+        // Arrange
+        var tempDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
+        Directory.CreateDirectory(tempDir);
+        
+        try
+        {
+            var checkpointService = new CheckpointService(tempDir);
+            var tasks = new List<TaskNode>
+            {
+                // Completed and validated task
+                new TaskNode
+                {
+                    Id = "task1",
+                    Description = "Completed task",
+                    IsCompleted = true,
+                    IsValidated = true,
+                    GeneratedCode = "public class Test1 { }",
+                    ValidationErrors = new List<string>() // No errors
+                },
+                // Completed task that had errors but was later validated
+                new TaskNode
+                {
+                    Id = "task2",
+                    Description = "Task with resolved errors",
+                    IsCompleted = true,
+                    IsValidated = true,
+                    GeneratedCode = "public class Test2 { }",
+                    ValidationErrors = new List<string> { "Error 1" } // Had errors, but validated
+                },
+                // Pending task (not completed, no errors)
+                new TaskNode
+                {
+                    Id = "task3",
+                    Description = "Pending task",
+                    IsCompleted = false,
+                    IsValidated = false,
+                    ValidationErrors = new List<string>()
+                },
+                // Failed task (not completed, has unresolved errors)
+                new TaskNode
+                {
+                    Id = "task4",
+                    Description = "Failed task",
+                    IsCompleted = false,
+                    IsValidated = false,
+                    ValidationErrors = new List<string> { "Compilation error" }
+                }
+            };
+            
+            var completedTaskIds = new HashSet<string> { "task1", "task2" };
+            
+            // Act
+            var checkpointPath = await checkpointService.SaveCheckpointAsync(
+                tasks,
+                completedTaskIds,
+                "Test categorization",
+                "Test description");
+            
+            // Assert
+            Assert.NotNull(checkpointPath);
+            var checkpoint = await checkpointService.LoadCheckpointAsync(checkpointPath);
+            
+            Assert.NotNull(checkpoint);
+            Assert.Equal(2, checkpoint.CompletedTasks); // task1, task2
+            Assert.Equal(1, checkpoint.PendingTasks); // task3
+            Assert.Equal(1, checkpoint.FailedTasks); // task4
+            
+            Assert.Contains("task3", checkpoint.PendingTaskIds);
+            Assert.Contains("task4", checkpoint.FailedTaskIds);
+            Assert.DoesNotContain("task1", checkpoint.PendingTaskIds);
+            Assert.DoesNotContain("task2", checkpoint.FailedTaskIds);
+        }
+        finally
+        {
+            // Cleanup
+            if (Directory.Exists(tempDir))
+            {
+                Directory.Delete(tempDir, true);
+            }
+        }
+    }
+    
+    [Fact]
+    public async Task SaveCheckpointAsync_PreservesCompletionTimestamps()
+    {
+        // Arrange
+        var tempDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
+        Directory.CreateDirectory(tempDir);
+        
+        try
+        {
+            var checkpointService = new CheckpointService(tempDir);
+            var completionTime = DateTime.UtcNow.AddMinutes(-5);
+            
+            var tasks = new List<TaskNode>
+            {
+                new TaskNode
+                {
+                    Id = "task1",
+                    Description = "Task with timestamp",
+                    IsCompleted = true,
+                    IsValidated = true,
+                    GeneratedCode = "public class Test { }",
+                    CompletedAtUtc = completionTime
+                }
+            };
+            
+            var completedTaskIds = new HashSet<string> { "task1" };
+            
+            // Act
+            var checkpointPath = await checkpointService.SaveCheckpointAsync(
+                tasks,
+                completedTaskIds,
+                "Test timestamps",
+                "Test description");
+            
+            // Assert
+            var checkpoint = await checkpointService.LoadCheckpointAsync(checkpointPath!);
+            Assert.NotNull(checkpoint);
+            Assert.Single(checkpoint.CompletedTaskDetails);
+            
+            var taskDetail = checkpoint.CompletedTaskDetails[0];
+            Assert.NotNull(taskDetail.CompletedAt);
+            
+            // Should use the task's actual completion time, not checkpoint creation time
+            var timeDifference = Math.Abs((taskDetail.CompletedAt.Value - completionTime).TotalSeconds);
+            Assert.True(timeDifference < 1, "Task completion time should match the actual completion time");
+        }
+        finally
+        {
+            // Cleanup
+            if (Directory.Exists(tempDir))
+            {
+                Directory.Delete(tempDir, true);
+            }
+        }
+    }
 }
