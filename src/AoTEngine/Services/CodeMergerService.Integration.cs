@@ -40,6 +40,21 @@ public partial class CodeMergerService
     /// <returns>The merged and fixed code.</returns>
     public async Task<MergeResult> MergeWithIntegrationAsync(List<TaskNode> tasks, MergeOptions? options = null)
     {
+        return await MergeWithIntegrationAsync(tasks, options, checkpointHandler: null);
+    }
+
+    /// <summary>
+    /// Advanced merge operation that uses Parse → Analyze → Fix → Emit pipeline with checkpoint support.
+    /// </summary>
+    /// <param name="tasks">Tasks with generated code to merge.</param>
+    /// <param name="options">Options controlling the merge behavior.</param>
+    /// <param name="checkpointHandler">Handler for manual conflict resolution checkpoints.</param>
+    /// <returns>The merged and fixed code.</returns>
+    public async Task<MergeResult> MergeWithIntegrationAsync(
+        List<TaskNode> tasks, 
+        MergeOptions? options, 
+        IntegrationCheckpointHandler? checkpointHandler)
+    {
         options ??= new MergeOptions();
         var result = new MergeResult();
 
@@ -63,6 +78,39 @@ public partial class CodeMergerService
             {
                 Console.WriteLine($"   ⚠️  Detected {TypeRegistry.Conflicts.Count} type conflict(s)");
                 result.Conflicts.AddRange(TypeRegistry.Conflicts);
+
+                // Check if manual intervention is required
+                if (checkpointHandler != null && options.EnableManualCheckpoints)
+                {
+                    var conflictsRequiringIntervention = TypeRegistry.Conflicts
+                        .Where(c => checkpointHandler.RequiresManualIntervention(new List<TypeConflict> { c }))
+                        .ToList();
+
+                    if (conflictsRequiringIntervention.Any())
+                    {
+                        Console.WriteLine($"   🛑 {conflictsRequiringIntervention.Count} conflict(s) require manual intervention");
+                        
+                        var reports = checkpointHandler.GenerateConflictReports(conflictsRequiringIntervention);
+                        var checkpointResult = await checkpointHandler.PromptForResolutionAsync(reports);
+                        
+                        if (checkpointResult.Abort)
+                        {
+                            result.Success = false;
+                            result.RemainingErrors.Add("Merge aborted by user during conflict resolution");
+                            return result;
+                        }
+
+                        // Apply user-selected resolutions
+                        foreach (var (typeName, resolution) in checkpointResult.Resolutions)
+                        {
+                            var conflict = TypeRegistry.Conflicts.FirstOrDefault(c => c.FullyQualifiedName == typeName);
+                            if (conflict != null)
+                            {
+                                conflict.SuggestedResolution = resolution;
+                            }
+                        }
+                    }
+                }
 
                 // Handle conflicts based on options
                 result = HandleConflicts(result, parsedTasks, options);
@@ -584,6 +632,12 @@ public class MergeOptions
     /// Maximum number of auto-fix iterations.
     /// </summary>
     public int MaxAutoFixIterations { get; set; } = 3;
+
+    /// <summary>
+    /// Whether to enable manual checkpoints for non-trivial conflicts.
+    /// When enabled, conflicts that cannot be auto-resolved will prompt for user input.
+    /// </summary>
+    public bool EnableManualCheckpoints { get; set; } = true;
 }
 
 /// <summary>
