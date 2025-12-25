@@ -63,10 +63,14 @@ public partial class ParallelExecutionEngine
             foreach (var task in results)
             {
                 task.IsCompleted = true;
+                task.CompletedAtUtc = DateTime.UtcNow;
                 completedTasks[task.Id] = task;
             }
 
             Console.WriteLine($"Generated code for {completedTasks.Count}/{tasks.Count} tasks");
+            
+            // Save checkpoint after each batch of code generation
+            await SaveCheckpointAsync(tasks, completedTasks);
         }
 
         // Step 2: Combine all generated code (still needed for Roslyn validation fallback)
@@ -117,6 +121,9 @@ public partial class ParallelExecutionEngine
                 
                 // Generate summaries for all tasks after batch validation
                 await GenerateSummariesForAllTasksAsync(tasks, completedTasks);
+                
+                // Save final checkpoint
+                await SaveCheckpointAsync(tasks, completedTasks, "completed");
                 
                 break;
             }

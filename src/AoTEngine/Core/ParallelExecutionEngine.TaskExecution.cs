@@ -48,11 +48,18 @@ public partial class ParallelExecutionEngine
             foreach (var task in results)
             {
                 task.IsCompleted = true;
+                task.CompletedAtUtc = DateTime.UtcNow;
                 completedTasks[task.Id] = task;
             }
 
             Console.WriteLine($"Completed {completedTasks.Count}/{tasks.Count} tasks");
+            
+            // Save checkpoint after each batch of tasks
+            await SaveCheckpointAsync(tasks, completedTasks);
         }
+
+        // Save final checkpoint
+        await SaveCheckpointAsync(tasks, completedTasks, "completed");
 
         return tasks;
     }

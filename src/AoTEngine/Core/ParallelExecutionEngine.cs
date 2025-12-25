@@ -24,9 +24,16 @@ public partial class ParallelExecutionEngine
     private readonly ProjectBuildService? _buildService;
     private readonly DocumentationService? _documentationService;
     private readonly TaskComplexityAnalyzer _complexityAnalyzer;
+    private readonly CheckpointService? _checkpointService;
     private readonly string? _outputDirectory;
+    private readonly bool _saveCheckpoints;
+    private readonly int _checkpointFrequency;
     private const int MaxRetries = 3;
     private const int DefaultMaxLineThreshold = 300;
+    
+    // Track state for checkpointing
+    private string _projectRequest = string.Empty;
+    private string _projectDescription = string.Empty;
 
     public ParallelExecutionEngine(
         OpenAIService openAIService, 
@@ -34,7 +41,9 @@ public partial class ParallelExecutionEngine
         UserInteractionService userInteractionService,
         ProjectBuildService? buildService = null,
         string? outputDirectory = null,
-        DocumentationService? documentationService = null)
+        DocumentationService? documentationService = null,
+        bool saveCheckpoints = true,
+        int checkpointFrequency = 1)
     {
         _openAIService = openAIService;
         _validatorService = validatorService;
@@ -43,6 +52,9 @@ public partial class ParallelExecutionEngine
         _outputDirectory = outputDirectory;
         _documentationService = documentationService;
         _complexityAnalyzer = new TaskComplexityAnalyzer();
+        _saveCheckpoints = saveCheckpoints && !string.IsNullOrEmpty(outputDirectory);
+        _checkpointFrequency = checkpointFrequency;
+        _checkpointService = _saveCheckpoints ? new CheckpointService(outputDirectory) : null;
     }
 
     /// <summary>
@@ -209,5 +221,45 @@ public partial class ParallelExecutionEngine
         }
         
         Console.WriteLine("✅ Summary generation complete.");
+    }
+
+    /// <summary>
+    /// Sets the project context for checkpoint generation.
+    /// </summary>
+    public void SetProjectContext(string projectRequest, string projectDescription)
+    {
+        _projectRequest = projectRequest;
+        _projectDescription = projectDescription;
+    }
+
+    /// <summary>
+    /// Saves a checkpoint of the current execution state.
+    /// </summary>
+    private async Task SaveCheckpointAsync(
+        List<TaskNode> tasks,
+        Dictionary<string, TaskNode> completedTasks,
+        string executionStatus = "in_progress")
+    {
+        if (_checkpointService == null || !_saveCheckpoints)
+        {
+            return;
+        }
+
+        // Only limit checkpointing frequency for non-final checkpoints
+        // Always save final checkpoint regardless of frequency
+        if (executionStatus != "completed" && 
+            _checkpointFrequency > 1 && 
+            completedTasks.Count % _checkpointFrequency != 0)
+        {
+            return;
+        }
+
+        var completedTaskIds = new HashSet<string>(completedTasks.Keys);
+        await _checkpointService.SaveCheckpointAsync(
+            tasks,
+            completedTaskIds,
+            _projectRequest,
+            _projectDescription,
+            executionStatus);
     }
 }

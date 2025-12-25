@@ -2,7 +2,154 @@
 
 All notable changes and improvements to the AoT Engine project.
 
-## [Latest] - Code Modularization for Maintainability
+## [Latest] - Incremental Checkpoint System
+
+### New Features
+
+#### Checkpoint System for Execution Recovery
+- **Automatic Checkpoint Saving**: Saves execution state after each task completion
+- **Dual Format Output**: Creates both JSON (machine-readable) and Markdown (human-readable) formats
+- **Checkpoint Contents**:
+  - All completed tasks with generated code
+  - Project architecture summary
+  - Dependency graph visualization
+  - Execution progress tracking
+  - Validation status and attempts
+  - Timestamp information
+- **Configuration Options**:
+  - `saveCheckpoints` - Enable/disable checkpointing (default: true when outputDirectory exists)
+  - `checkpointFrequency` - Save every N tasks (default: 1 for every task)
+- **Smart File Management**:
+  - Saves to `checkpoints/` subdirectory in output directory
+  - Creates timestamped files: `checkpoint_YYYYMMDD_HHMMSS.json`
+  - Maintains `latest.json` and `latest.md` for easy access
+- **Console Feedback**: 💾 Checkpoint saved: checkpoint_20251225_103000.json
+- **Error Resilience**: Checkpoint failures don't stop execution
+
+#### New Models
+- **CheckpointData**: Complete execution state snapshot
+  - Project request and description
+  - Task counts (total, completed, pending, failed)
+  - Completed task details with code
+  - Dependency graph
+  - Architecture summary
+  - Execution status (in_progress, completed, failed)
+- **CompletedTaskDetail**: Individual task information
+  - Task ID, description, dependencies
+  - Generated code and namespace
+  - Validation status and attempts
+  - Completion timestamp
+  - Task summary
+
+#### New Services
+- **CheckpointService**: Manages checkpoint lifecycle
+  - `SaveCheckpointAsync()` - Saves current state to disk
+  - `LoadCheckpointAsync()` - Loads checkpoint from file
+  - `GenerateCheckpointMarkdown()` - Creates human-readable summary
+  - `GetLatestCheckpoint()` - Finds most recent checkpoint
+  - Automatic file I/O error handling
+  - Async operations for non-blocking saves
+
+#### Integration Points
+- **ParallelExecutionEngine**: Enhanced with checkpoint support
+  - Integrated into `ExecuteTasksAsync()` - individual validation mode
+  - Integrated into `ExecuteTasksWithBatchValidationAsync()` - batch mode
+  - Integrated into `ExecuteTasksWithHybridValidationAsync()` - hybrid mode
+  - New constructor parameters: `saveCheckpoints`, `checkpointFrequency`
+  - New method: `SetProjectContext()` for checkpoint metadata
+  - Private method: `SaveCheckpointAsync()` for checkpoint creation
+- **AoTEngineOrchestrator**: Passes project context to engine
+
+#### File Structure
+```
+outputDirectory/
+├── checkpoints/
+│   ├── checkpoint_20251225_103000.json
+│   ├── checkpoint_20251225_103000.md
+│   ├── checkpoint_20251225_104500.json
+│   ├── checkpoint_20251225_104500.md
+│   ├── latest.json  (copy of most recent)
+│   └── latest.md    (copy of most recent)
+└── GeneratedCode_*/  (generated projects)
+```
+
+#### Checkpoint JSON Format
+```json
+{
+  "checkpoint_timestamp": "2025-12-25T10:30:00Z",
+  "project_request": "Original user request",
+  "project_description": "Decomposition description",
+  "total_tasks": 10,
+  "completed_tasks": 7,
+  "pending_tasks": 3,
+  "failed_tasks": 0,
+  "completed_task_details": [...],
+  "pending_task_ids": ["task8", "task9"],
+  "failed_task_ids": [],
+  "dependency_graph": {...},
+  "architecture_summary": "Current architecture state",
+  "execution_status": "in_progress"
+}
+```
+
+#### Usage Examples
+
+**Enable checkpoints** (default when output directory is specified):
+```csharp
+var executionEngine = new ParallelExecutionEngine(
+    openAIService, 
+    validatorService,
+    userInteractionService,
+    buildService,
+    outputDirectory: "./output",
+    documentationService: documentationService,
+    saveCheckpoints: true,    // Enable checkpoints
+    checkpointFrequency: 1);  // Save after every task
+```
+
+**Disable checkpoints**:
+```csharp
+var executionEngine = new ParallelExecutionEngine(
+    openAIService, 
+    validatorService,
+    userInteractionService,
+    buildService: null,
+    outputDirectory: null,
+    documentationService: null,
+    saveCheckpoints: false);  // Disable checkpoints
+```
+
+**Save checkpoints every 5 tasks**:
+```csharp
+var executionEngine = new ParallelExecutionEngine(
+    openAIService, 
+    validatorService,
+    userInteractionService,
+    buildService,
+    outputDirectory: "./output",
+    documentationService: null,
+    saveCheckpoints: true,
+    checkpointFrequency: 5);  // Save every 5 tasks
+```
+
+**Load checkpoint for recovery**:
+```csharp
+var checkpointService = new CheckpointService("./output");
+var latestCheckpoint = checkpointService.GetLatestCheckpoint("./output");
+var checkpoint = await checkpointService.LoadCheckpointAsync(latestCheckpoint);
+// Use checkpoint data to understand execution state
+```
+
+#### Benefits
+- **Progress Tracking**: Monitor execution progress in real-time
+- **Recovery Support**: Understand what was completed before interruption
+- **Debugging Aid**: Examine generated code and dependencies at any point
+- **Documentation**: Human-readable Markdown shows project evolution
+- **Audit Trail**: Complete history of task completion and validation
+
+---
+
+## [Previous] - Code Modularization for Maintainability
 
 ### New Structure
 

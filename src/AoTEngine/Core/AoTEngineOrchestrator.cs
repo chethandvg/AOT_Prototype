@@ -110,10 +110,15 @@ public class AoTEngineOrchestrator
                     buildService,
                     outputDirectory,
                     _documentationService);
+                
+                // Set project context for checkpointing
+                executionEngine.SetProjectContext(result.OriginalRequest, result.Description);
             }
             else
             {
                 executionEngine = _executionEngine;
+                // Set project context for checkpointing
+                executionEngine.SetProjectContext(result.OriginalRequest, result.Description);
             }
             
             if (useHybridValidation)

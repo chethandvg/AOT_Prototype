@@ -42,7 +42,7 @@ The AoT Engine is a sophisticated C# application that leverages OpenAI's GPT mod
 - Merges all snippets into a cohesive solution
 - Generates execution reports
 
-### 6. **Documentation Generation** ⚠️ NEW
+### 6. **Documentation Generation**
 - Generates per-task summaries after code validation
 - Synthesizes project-level architecture documentation
 - Exports documentation in multiple formats:
@@ -50,6 +50,18 @@ The AoT Engine is a sophisticated C# application that leverages OpenAI's GPT mod
   - **JSON** (`Documentation.json`) - Structured data for tooling
   - **JSONL** (`training_data.jsonl`) - Fine-tuning dataset for ML models
 - Uses dependency summaries as context for better task coherence
+
+### 7. **Incremental Checkpoint System** ⚠️ NEW
+- Automatically saves execution state after each task completion
+- Creates both JSON and Markdown checkpoint files
+- Enables progress tracking and execution recovery
+- Includes:
+  - All completed tasks with generated code
+  - Project architecture summary
+  - Dependency graph visualization
+  - Validation status and attempts
+- Saved to `checkpoints/` subdirectory in output directory
+- Maintains `latest.json` and `latest.md` for easy access
 
 ## Architecture
 
@@ -59,8 +71,9 @@ AoTEngine/
 │   ├── TaskNode.cs            # Represents atomic task in DAG
 │   ├── TaskSummaryRecord.cs   # Structured task documentation
 │   ├── ProjectDocumentation.cs # Project-level documentation
-│   ├── ComplexityMetrics.cs   # Task complexity analysis metrics (NEW)
-│   ├── TaskDecompositionStrategy.cs # Decomposition strategies (NEW)
+│   ├── CheckpointData.cs      # Checkpoint snapshot structure (NEW)
+│   ├── ComplexityMetrics.cs   # Task complexity analysis metrics
+│   ├── TaskDecompositionStrategy.cs # Decomposition strategies
 │   ├── TaskDecompositionRequest.cs
 │   ├── TaskDecompositionResponse.cs
 │   └── ValidationResult.cs
@@ -69,8 +82,9 @@ AoTEngine/
 │   ├── CodeValidatorService.cs # Code compilation & validation
 │   ├── CodeMergerService.cs   # Code merging & contract validation
 │   ├── DocumentationService.cs # Documentation generation
-│   ├── TaskComplexityAnalyzer.cs # Complexity analysis service (NEW)
-│   ├── AutoDecomposer.cs      # Automatic task decomposition (NEW)
+│   ├── CheckpointService.cs   # Checkpoint management (NEW)
+│   ├── TaskComplexityAnalyzer.cs # Complexity analysis service
+│   ├── AutoDecomposer.cs      # Automatic task decomposition
 │   └── UserInteractionService.cs # Handles user input for uncertainties
 ├── Core/                       # Engine components
 │   ├── ParallelExecutionEngine.cs # Parallel task execution
