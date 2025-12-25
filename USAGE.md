@@ -560,16 +560,34 @@ public class Calculator { ... }
 // Load latest checkpoint
 var checkpointService = new CheckpointService("./output");
 var latestPath = checkpointService.GetLatestCheckpoint("./output");
-var checkpoint = await checkpointService.LoadCheckpointAsync(latestPath);
 
-Console.WriteLine($"Completed: {checkpoint.CompletedTasks}/{checkpoint.TotalTasks}");
-Console.WriteLine($"Status: {checkpoint.ExecutionStatus}");
-
-// Examine completed tasks
-foreach (var task in checkpoint.CompletedTaskDetails)
+if (latestPath != null)
 {
-    Console.WriteLine($"Task {task.TaskId}: {task.Description}");
-    Console.WriteLine($"Code: {task.GeneratedCode.Substring(0, 100)}...");
+    var checkpoint = await checkpointService.LoadCheckpointAsync(latestPath);
+    
+    if (checkpoint != null)
+    {
+        Console.WriteLine($"Completed: {checkpoint.CompletedTasks}/{checkpoint.TotalTasks}");
+        Console.WriteLine($"Status: {checkpoint.ExecutionStatus}");
+
+        // Examine completed tasks
+        foreach (var task in checkpoint.CompletedTaskDetails)
+        {
+            Console.WriteLine($"Task {task.TaskId}: {task.Description}");
+            var codePreview = task.GeneratedCode.Length > 100 
+                ? task.GeneratedCode.Substring(0, 100) + "..." 
+                : task.GeneratedCode;
+            Console.WriteLine($"Code: {codePreview}");
+        }
+    }
+    else
+    {
+        Console.WriteLine("Failed to load checkpoint.");
+    }
+}
+else
+{
+    Console.WriteLine("No checkpoints found in the specified output directory.");
 }
 ```
 
@@ -583,7 +601,7 @@ var executionEngine = new ParallelExecutionEngine(
     userInteractionService,
     buildService,
     outputDirectory: "./output",
-    documentationService,
+    documentationService: documentationService,
     saveCheckpoints: true);  // Default: true when outputDirectory exists
 ```
 
@@ -595,7 +613,7 @@ var executionEngine = new ParallelExecutionEngine(
     userInteractionService,
     buildService,
     outputDirectory: "./output",
-    documentationService,
+    documentationService: documentationService,
     saveCheckpoints: true,
     checkpointFrequency: 5);  // Save every 5 tasks (default: 1)
 ```

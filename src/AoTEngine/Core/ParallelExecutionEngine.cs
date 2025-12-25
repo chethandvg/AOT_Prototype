@@ -245,8 +245,11 @@ public partial class ParallelExecutionEngine
             return;
         }
 
-        // Only save checkpoint based on frequency
-        if (_checkpointFrequency > 1 && completedTasks.Count % _checkpointFrequency != 0)
+        // Only limit checkpointing frequency for non-final checkpoints
+        // Always save final checkpoint regardless of frequency
+        if (executionStatus != "completed" && 
+            _checkpointFrequency > 1 && 
+            completedTasks.Count % _checkpointFrequency != 0)
         {
             return;
         }

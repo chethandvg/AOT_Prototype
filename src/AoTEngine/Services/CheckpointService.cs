@@ -98,8 +98,13 @@ public class CheckpointService
         string architectureSummary)
     {
         var completedTasks = tasks.Where(t => completedTaskIds.Contains(t.Id)).ToList();
-        var pendingTasks = tasks.Where(t => !completedTaskIds.Contains(t.Id) && !t.ValidationErrors.Any()).ToList();
-        var failedTasks = tasks.Where(t => t.ValidationErrors.Any() && !t.IsValidated).ToList();
+        // Pending tasks: not yet completed
+        var pendingTasks = tasks.Where(t => !completedTaskIds.Contains(t.Id) && 
+                                            (!t.ValidationErrors.Any() || t.IsValidated)).ToList();
+        // Failed tasks: not completed and have validation errors that weren't resolved
+        var failedTasks = tasks.Where(t => !completedTaskIds.Contains(t.Id) && 
+                                           t.ValidationErrors.Any() && 
+                                           !t.IsValidated).ToList();
 
         var checkpoint = new CheckpointData
         {

@@ -102,7 +102,7 @@ var executionEngine = new ParallelExecutionEngine(
     userInteractionService,
     buildService,
     outputDirectory: "./output",
-    documentationService,
+    documentationService: documentationService,
     saveCheckpoints: true,    // Enable checkpoints
     checkpointFrequency: 1);  // Save after every task
 ```
@@ -113,6 +113,9 @@ var executionEngine = new ParallelExecutionEngine(
     openAIService, 
     validatorService,
     userInteractionService,
+    buildService: null,
+    outputDirectory: null,
+    documentationService: null,
     saveCheckpoints: false);  // Disable checkpoints
 ```
 
@@ -124,6 +127,8 @@ var executionEngine = new ParallelExecutionEngine(
     userInteractionService,
     buildService,
     outputDirectory: "./output",
+    documentationService: null,
+    saveCheckpoints: true,
     checkpointFrequency: 5);  // Save every 5 tasks
 ```
 
