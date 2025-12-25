@@ -62,17 +62,25 @@ public enum ProjectSymbolKind
 /// <summary>
 /// Maintains a project-wide symbol table for tracking what types and members have been defined.
 /// Used to prevent duplicate definitions and provide context to subsequent tasks.
+/// Enhanced with collision detection and namespace enforcement.
 /// </summary>
 public class SymbolTable
 {
     private readonly Dictionary<string, ProjectSymbolInfo> _symbols = new();
     private readonly Dictionary<string, HashSet<string>> _symbolsByNamespace = new();
     private readonly Dictionary<string, HashSet<string>> _symbolsByTask = new();
+    private readonly Dictionary<string, HashSet<string>> _symbolsBySimpleName = new();
+    private readonly List<SymbolCollision> _collisions = new();
 
     /// <summary>
     /// All known symbols.
     /// </summary>
     public IReadOnlyDictionary<string, ProjectSymbolInfo> Symbols => _symbols;
+
+    /// <summary>
+    /// All detected collisions.
+    /// </summary>
+    public IReadOnlyList<SymbolCollision> Collisions => _collisions;
 
     /// <summary>
     /// Registers a new symbol in the table.
@@ -107,7 +115,161 @@ public class SymbolTable
             taskSymbols.Add(symbol.FullyQualifiedName);
         }
 
+        // Index by simple name for collision detection
+        if (!_symbolsBySimpleName.TryGetValue(symbol.Name, out var simpleNameSymbols))
+        {
+            simpleNameSymbols = new HashSet<string>();
+            _symbolsBySimpleName[symbol.Name] = simpleNameSymbols;
+        }
+        else if (simpleNameSymbols.Any())
+        {
+            // Collision detected - same simple name in different namespaces
+            _collisions.AddRange(simpleNameSymbols.Select(existingFqn => new SymbolCollision
+            {
+                SimpleName = symbol.Name,
+                ExistingSymbol = _symbols[existingFqn],
+                NewSymbol = symbol,
+                CollisionType = DetermineCollisionType(_symbols[existingFqn], symbol)
+            }));
+        }
+        simpleNameSymbols.Add(symbol.FullyQualifiedName);
+
         return true;
+    }
+
+    /// <summary>
+    /// Determines the type of collision between two symbols.
+    /// </summary>
+    private SymbolCollisionType DetermineCollisionType(ProjectSymbolInfo existing, ProjectSymbolInfo newSymbol)
+    {
+        // Same namespace = duplicate definition
+        if (existing.Namespace == newSymbol.Namespace)
+        {
+            return SymbolCollisionType.DuplicateDefinition;
+        }
+
+        // DTO in Services namespace when it should be in Models
+        if (IsModelType(newSymbol) && newSymbol.Namespace.Contains(".Services"))
+        {
+            return SymbolCollisionType.MisplacedModel;
+        }
+
+        // Same simple name in different namespaces = ambiguity
+        return SymbolCollisionType.AmbiguousName;
+    }
+
+    /// <summary>
+    /// Checks if a symbol represents a model/DTO type.
+    /// </summary>
+    private bool IsModelType(ProjectSymbolInfo symbol)
+    {
+        // Heuristic: non-interface types with a model-like suffix.
+        // We treat service-specific Request/Response types in Services namespaces
+        // as non-models to avoid flagging legitimate service DTOs as misplaced.
+        var name = symbol.Name;
+
+        // Do not treat service-layer Request/Response types as models.
+        if (symbol.Namespace.Contains(".Services") &&
+            (name.EndsWith("Request") || name.EndsWith("Response")))
+        {
+            return false;
+        }
+
+        return symbol.Kind != ProjectSymbolKind.Interface &&
+               (name.EndsWith("Info") ||
+                name.EndsWith("Data") ||
+                name.EndsWith("Dto") ||
+                name.EndsWith("Model"));
+    }
+
+    /// <summary>
+    /// Gets all symbols with a given simple name (for ambiguity detection).
+    /// </summary>
+    public IEnumerable<ProjectSymbolInfo> GetSymbolsBySimpleName(string simpleName)
+    {
+        if (_symbolsBySimpleName.TryGetValue(simpleName, out var fqns))
+        {
+            return fqns.Select(fqn => _symbols[fqn]);
+        }
+        return Enumerable.Empty<ProjectSymbolInfo>();
+    }
+
+    /// <summary>
+    /// Checks if a simple name is ambiguous (exists in multiple namespaces).
+    /// </summary>
+    public bool IsAmbiguous(string simpleName)
+    {
+        return _symbolsBySimpleName.TryGetValue(simpleName, out var fqns) && fqns.Count > 1;
+    }
+
+    /// <summary>
+    /// Validates namespace conventions for a symbol.
+    /// Returns validation errors if conventions are violated.
+    /// </summary>
+    public List<string> ValidateNamespaceConventions(ProjectSymbolInfo symbol)
+    {
+        var errors = new List<string>();
+
+        // Models/DTOs should be in .Models namespace
+        if (IsModelType(symbol) && !symbol.Namespace.Contains(".Models") && symbol.Namespace.Contains(".Services"))
+        {
+            errors.Add($"Model type '{symbol.Name}' should be in a '.Models' namespace, not '{symbol.Namespace}'");
+        }
+
+        // Interfaces should have 'I' prefix
+        if (symbol.Kind == ProjectSymbolKind.Interface && !symbol.Name.StartsWith("I"))
+        {
+            errors.Add($"Interface '{symbol.Name}' should have 'I' prefix");
+        }
+
+        return errors;
+    }
+
+    /// <summary>
+    /// Gets a suggested alias for an ambiguous type.
+    /// </summary>
+    public string GetSuggestedAlias(string simpleName, string preferredNamespace)
+    {
+        var symbols = GetSymbolsBySimpleName(simpleName).ToList();
+        
+        if (symbols.Count <= 1)
+        {
+            return simpleName;
+        }
+
+        // Find the one in the preferred namespace
+        var preferred = symbols.FirstOrDefault(s => s.Namespace == preferredNamespace);
+        if (preferred != null)
+        {
+            return preferred.FullyQualifiedName;
+        }
+
+        // Return the first one with Models namespace (for DTOs)
+        var modelsType = symbols.FirstOrDefault(s => s.Namespace.Contains(".Models"));
+        if (modelsType != null)
+        {
+            return modelsType.FullyQualifiedName;
+        }
+
+        // Return first available
+        return symbols.First().FullyQualifiedName;
+    }
+
+    /// <summary>
+    /// Generates using alias suggestions for ambiguous types.
+    /// </summary>
+    public List<string> GenerateUsingAliases()
+    {
+        var aliases = new List<string>();
+
+        foreach (var collision in _collisions.Where(c => c.CollisionType == SymbolCollisionType.AmbiguousName))
+        {
+            // Create alias for the new symbol
+            var alias = $"{collision.NewSymbol.Namespace.Replace(".", "")}{collision.NewSymbol.Name}";
+            aliases.Add($"using {alias} = {collision.NewSymbol.FullyQualifiedName};");
+        }
+
+        return aliases;
     }
 
     /// <summary>
@@ -203,7 +365,50 @@ public class SymbolTable
         _symbols.Clear();
         _symbolsByNamespace.Clear();
         _symbolsByTask.Clear();
+        _symbolsBySimpleName.Clear();
+        _collisions.Clear();
     }
+}
+
+/// <summary>
+/// Represents a collision between symbols.
+/// </summary>
+public class SymbolCollision
+{
+    /// <summary>
+    /// The simple name that caused the collision.
+    /// </summary>
+    public string SimpleName { get; set; } = string.Empty;
+
+    /// <summary>
+    /// The existing symbol.
+    /// </summary>
+    public ProjectSymbolInfo ExistingSymbol { get; set; } = null!;
+
+    /// <summary>
+    /// The new symbol that collides.
+    /// </summary>
+    public ProjectSymbolInfo NewSymbol { get; set; } = null!;
+
+    /// <summary>
+    /// Type of collision.
+    /// </summary>
+    public SymbolCollisionType CollisionType { get; set; }
+}
+
+/// <summary>
+/// Types of symbol collisions.
+/// </summary>
+public enum SymbolCollisionType
+{
+    /// <summary>Same type defined multiple times in same namespace.</summary>
+    DuplicateDefinition,
+    
+    /// <summary>Same simple name in different namespaces (ambiguous).</summary>
+    AmbiguousName,
+    
+    /// <summary>Model/DTO defined in wrong namespace (should be in .Models).</summary>
+    MisplacedModel
 }
 
 /// <summary>

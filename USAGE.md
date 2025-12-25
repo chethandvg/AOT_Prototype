@@ -163,19 +163,29 @@ var result = await orchestrator.ExecuteAsync(
     useBatchValidation: true,
     useHybridValidation: false,
     outputDirectory: "./output",
-    maxLinesPerTask: 300,           // Max lines per generated task (NEW)
-    enableComplexityAnalysis: true   // Enable automatic decomposition (NEW)
+    maxLinesPerTask: 300,           // Max lines per generated task
+    enableComplexityAnalysis: true,  // Enable automatic decomposition
+    enableContractFirst: true,       // Enable Contract-First generation (NEW)
+    projectName: "UserService"       // Project name for namespace prefixing (NEW)
 );
 
 if (result.Success)
 {
     Console.WriteLine(result.FinalCode);
     
-    // Access documentation (NEW)
+    // Access documentation
     Console.WriteLine(result.FinalDocumentation);
     Console.WriteLine($"Markdown: {result.DocumentationPaths?.MarkdownPath}");
     Console.WriteLine($"JSON: {result.DocumentationPaths?.JsonPath}");
     Console.WriteLine($"JSONL: {result.DocumentationPaths?.JsonlDatasetPath}");
+    
+    // Access frozen contracts (NEW)
+    if (result.ContractCatalog != null)
+    {
+        Console.WriteLine($"Frozen Interfaces: {result.ContractCatalog.Interfaces.Count}");
+        Console.WriteLine($"Frozen Enums: {result.ContractCatalog.Enums.Count}");
+        Console.WriteLine($"Frozen Models: {result.ContractCatalog.Models.Count}");
+    }
 }
 ```
 
@@ -413,6 +423,80 @@ The project implements a layered database service architecture...
 }
 ```
 
+## Contract-First Configuration (NEW)
+
+### Enabling Contract-First Generation
+```json
+{
+  "Engine": {
+    "EnableContractFirst": true
+  }
+}
+```
+
+### Programmatic Usage
+```csharp
+var result = await orchestrator.ExecuteAsync(
+    userRequest,
+    context: "",
+    useBatchValidation: true,
+    useHybridValidation: false,
+    outputDirectory: "./output",
+    enableContractFirst: true,    // Enable Contract-First
+    projectName: "MyProject"      // Project name for namespaces
+);
+
+// Access frozen contracts
+if (result.ContractCatalog != null)
+{
+    // Inspect frozen interfaces
+    foreach (var iface in result.ContractCatalog.Interfaces)
+    {
+        Console.WriteLine($"Interface: {iface.FullyQualifiedName}");
+        foreach (var method in iface.Methods)
+        {
+            Console.WriteLine($"  - {method.ReturnType} {method.Name}(...)");
+        }
+    }
+    
+    // Inspect frozen enums
+    foreach (var enumContract in result.ContractCatalog.Enums)
+    {
+        Console.WriteLine($"Enum: {enumContract.Name}");
+        Console.WriteLine($"  Members: {string.Join(", ", enumContract.Members.Select(m => m.Name))}");
+    }
+}
+```
+
+### Contract Manifest File
+When Contract-First is enabled, a `contracts.json` manifest is saved:
+```json
+{
+  "projectName": "MyProject",
+  "rootNamespace": "MyProject",
+  "isFrozen": true,
+  "frozenAtUtc": "2025-12-25T10:30:00Z",
+  "enums": [...],
+  "interfaces": [...],
+  "models": [...],
+  "abstractClasses": [...]
+}
+```
+
+### Output Files with Contract-First
+```
+outputDirectory/
+├── contracts.json              # Contract manifest (NEW)
+├── MyProject.Contracts/        # Contract .cs files (NEW)
+│   ├── IMyInterface.cs
+│   ├── MyEnum.cs
+│   └── MyModel.cs
+├── generated_code.cs
+├── Documentation.md
+├── Documentation.json
+└── training_data.jsonl
+```
+
 ## Troubleshooting
 
 ### Issue: OpenAI API Key Error
@@ -448,7 +532,19 @@ The project implements a layered database service architecture...
 ### Issue: Ambiguous Type References (NEW)
 **Solution:** When types with the same name exist in multiple namespaces, the IntegrationFixer can fully qualify type names. You can also add custom type-to-namespace mappings using `IntegrationFixer.AddTypeNamespaceMapping()`.
 
-## Advanced Code Integration (NEW)
+### Issue: Interface Implementation Missing (Contract-First)
+**Solution:** When Contract-First is enabled, the AutoFixService attempts to add missing interface implementations. If auto-fix fails, the error message will include the exact method signatures required. Ensure your implementation matches the frozen contract exactly.
+
+### Issue: Sealed Type Inheritance Error (Contract-First)
+**Solution:** The engine detects attempts to inherit from sealed types and suggests using composition instead. The AutoFixService can automatically convert `class A : SealedBase` to composition with a private field.
+
+### Issue: Invalid Enum Member Usage (Contract-First)
+**Solution:** When using frozen enums, only members defined in the contract are valid. Check `result.ContractCatalog.Enums` for valid members. The AtomCompilationService detects invalid enum member usage early.
+
+### Issue: Contract Violations Not Detected Early
+**Solution:** Enable Contract-First with `enableContractFirst: true`. This runs per-atom compilation checks that catch contract violations before batch validation, reducing wasted generation attempts.
+
+## Advanced Code Integration
 
 The code integration system has been upgraded from simple concatenation to a sophisticated merge-with-rules pipeline.
 

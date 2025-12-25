@@ -15,6 +15,7 @@ public class AoTEngineOrchestrator
     private readonly CodeValidatorService _validatorService;
     private readonly DocumentationService? _documentationService;
     private readonly DocumentationConfig? _documentationConfig;
+    private readonly ContractGenerationService? _contractService;
     private const int DefaultMaxLineThreshold = 300;
 
     public AoTEngineOrchestrator(
@@ -24,7 +25,8 @@ public class AoTEngineOrchestrator
         UserInteractionService userInteractionService,
         CodeValidatorService validatorService,
         DocumentationService? documentationService = null,
-        DocumentationConfig? documentationConfig = null)
+        DocumentationConfig? documentationConfig = null,
+        ContractGenerationService? contractService = null)
     {
         _openAIService = openAIService;
         _executionEngine = executionEngine;
@@ -33,6 +35,7 @@ public class AoTEngineOrchestrator
         _validatorService = validatorService;
         _documentationService = documentationService;
         _documentationConfig = documentationConfig;
+        _contractService = contractService;
     }
 
     /// <summary>
@@ -45,6 +48,8 @@ public class AoTEngineOrchestrator
     /// <param name="outputDirectory">Output directory for generated code.</param>
     /// <param name="maxLinesPerTask">Maximum lines per generated task (default: 300). Tasks exceeding this will be decomposed.</param>
     /// <param name="enableComplexityAnalysis">Whether to enable complexity analysis and automatic decomposition.</param>
+    /// <param name="enableContractFirst">Whether to enable contract-first code generation (recommended for large projects).</param>
+    /// <param name="projectName">Project name for contract generation namespace prefixing.</param>
     public async Task<AoTResult> ExecuteAsync(
         string userRequest, 
         string context = "", 
@@ -52,7 +57,9 @@ public class AoTEngineOrchestrator
         bool useHybridValidation = false,
         string? outputDirectory = null,
         int maxLinesPerTask = DefaultMaxLineThreshold,
-        bool enableComplexityAnalysis = true)
+        bool enableComplexityAnalysis = true,
+        bool enableContractFirst = false,
+        string? projectName = null)
     {
         var result = new AoTResult { OriginalRequest = userRequest };
 
@@ -77,6 +84,39 @@ public class AoTEngineOrchestrator
             {
                 var deps = task.Dependencies.Any() ? string.Join(", ", task.Dependencies) : "None";
                 Console.WriteLine($"  - {task.Id}: {task.Description} [Dependencies: {deps}]");
+            }
+
+            // Step 1.25: Contract-First Generation (if enabled)
+            ContractCatalog? contractCatalog = null;
+            if (enableContractFirst && _contractService != null)
+            {
+                Console.WriteLine("\nStep 1.25: Generating frozen contracts (Contract-First approach)...");
+                var projName = projectName ?? ExtractProjectName(userRequest);
+                
+                contractCatalog = await _contractService.GenerateContractCatalogAsync(
+                    result.Tasks,
+                    projName,
+                    userRequest);
+                
+                // Set up the OpenAI service with contract awareness
+                _openAIService.SetContractCatalog(
+                    contractCatalog,
+                    _contractService.SymbolTable,
+                    _mergerService.TypeRegistry);
+                
+                // Save contract manifest if output directory is specified
+                if (!string.IsNullOrEmpty(outputDirectory))
+                {
+                    var manifestService = new ContractManifestService();
+                    var manifestPath = await manifestService.SaveManifestAsync(contractCatalog, outputDirectory);
+                    Console.WriteLine($"   📄 Contract manifest saved to: {manifestPath}");
+                    
+                    // Generate contract code files
+                    var contractFiles = await manifestService.GenerateContractFilesAsync(contractCatalog, outputDirectory);
+                    Console.WriteLine($"   📁 Generated {contractFiles.Count} contract files");
+                }
+                
+                result.ContractCatalog = contractCatalog;
             }
 
             // Step 1.5: Complexity analysis and automatic decomposition of complex tasks
@@ -272,5 +312,47 @@ public class AoTEngineOrchestrator
         }
         
         return sb.ToString();
+    }
+
+    /// <summary>
+    /// Extracts a project name from the user request.
+    /// </summary>
+    private string ExtractProjectName(string userRequest)
+    {
+        // Try to find a project name pattern in the request
+        var patterns = new[]
+        {
+            @"(?:project|application|app|system|service)\s+(?:called|named|for)\s+[""']?(\w+)[""']?",
+            @"(?:build|create|develop|implement)\s+(?:a|an|the)\s+(\w+)",
+            @"(\w+)(?:Project|App|System|Service|Application)"
+        };
+
+        foreach (var pattern in patterns)
+        {
+            var match = System.Text.RegularExpressions.Regex.Match(
+                userRequest, 
+                pattern, 
+                System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+            
+            if (match.Success && match.Groups.Count > 1)
+            {
+                var name = match.Groups[1].Value?.Trim();
+                if (string.IsNullOrEmpty(name))
+                {
+                    // If we couldn't extract a valid name from this pattern, try the next one
+                    continue;
+                }
+
+                // Clean up and capitalize
+                if (name.Length == 1)
+                {
+                    return char.ToUpper(name[0]).ToString();
+                }
+                return char.ToUpper(name[0]) + name.Substring(1);
+            }
+        }
+
+        // Default fallback
+        return "GeneratedProject";
     }
 }

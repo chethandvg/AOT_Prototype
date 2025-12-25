@@ -2,13 +2,14 @@
 
 ## System Overview
 
-The AoT (Atom of Thought) Engine is designed around six core principles:
+The AoT (Atom of Thought) Engine is designed around seven core principles:
 1. **Decomposition**: Break complex tasks into atomic units
 2. **Parallelism**: Execute independent tasks concurrently
 3. **Validation**: Ensure code quality through compilation and linting
 4. **Interaction**: Engage users when uncertainties arise
 5. **Documentation**: Generate structured documentation and training data
 6. **Complexity Management**: Ensure tasks stay within manageable size limits (≤300 lines)
+7. **Contract-First**: Generate and freeze API contracts before implementations
 
 ## Architecture Diagram
 
@@ -38,6 +39,18 @@ The AoT (Atom of Thought) Engine is designed around six core principles:
                         │
                         ▼
               ┌─────────────────────┐
+              │  Contract           │
+              │  Generation (NEW)   │
+              │                     │
+              │ • Freeze Enums      │
+              │ • Freeze Interfaces │
+              │ • Freeze Models     │
+              │ • Freeze Abstract   │
+              │ • Contract Catalog  │
+              └─────────┬───────────┘
+                        │
+                        ▼
+              ┌─────────────────────┐
               │  Code Validator     │
               │  Service            │
               │                     │
@@ -45,7 +58,29 @@ The AoT (Atom of Thought) Engine is designed around six core principles:
               │ • Syntax Check      │
               │ • Linting           │
               │ • Retry Logic       │
-              └─────────────────────┘
+              └─────────┬───────────┘
+                        │
+                        ▼
+              ┌─────────────────────┐
+              │  Atom Compilation   │
+              │  Service (NEW)      │
+              │                     │
+              │ • Per-file compile  │
+              │ • Diagnostic class  │
+              │ • Contract validate │
+              │ • Early failure     │
+              └─────────┬───────────┘
+                        │
+                        ▼
+              ┌─────────────────────┐
+              │  Auto-Fix           │
+              │  Service (NEW)      │
+              │                     │
+              │ • Interface impl    │
+              │ • Abstract override │
+              │ • Sealed→Compose    │
+              │ • Ambiguous refs    │
+              └─────────┬───────────┘
                         │
                         ▼
               ┌─────────────────────┐
@@ -62,7 +97,7 @@ The AoT (Atom of Thought) Engine is designed around six core principles:
                         ▼
               ┌─────────────────────┐
               │  Documentation      │
-              │  Service (NEW)      │
+              │  Service            │
               │                     │
               │ • Task Summaries    │
               │ • Project Docs      │
@@ -74,7 +109,7 @@ The AoT (Atom of Thought) Engine is designed around six core principles:
                         ▼
               ┌─────────────────────┐
               │  Task Complexity    │
-              │  Analyzer (NEW)     │
+              │  Analyzer           │
               │                     │
               │ • Line Count Est    │
               │ • Complexity Score  │
@@ -132,13 +167,51 @@ The AoT (Atom of Thought) Engine is designed around six core principles:
 - ExistingEntry, NewEntry, ConflictingMembers
 - Used by IntegrationCheckpointHandler for resolution
 
-**SymbolTable** (NEW)
-- Project-wide symbol tracking
-- Properties: Symbols (dictionary)
+**SymbolTable** (ENHANCED)
+- Project-wide symbol tracking with collision detection
+- Properties: Symbols (dictionary), Collisions (list)
 - Generates "Known Types" blocks for prompt injection
 - Helps prevent model from redefining existing symbols
+- `GetSymbolsBySimpleName()`, `IsAmbiguous()`, `ValidateNamespaceConventions()`
+- `GetSuggestedAlias()`, `GenerateUsingAliases()`
 
-**ProjectSymbolInfo** (NEW)
+**ContractCatalog** (NEW)
+- Frozen contract definitions container
+- Properties: Enums, Interfaces, Models, AbstractClasses
+- `Freeze()` to lock contracts after generation
+- `ContainsType()`, `GetContract()`, `GetAllContracts()`
+- Each contract has `GenerateCode()` for C# generation
+
+**EnumContract** (NEW)
+- Enum definition with members and values
+- Properties: Name, Namespace, Members, IsFlags
+- `GenerateCode()` produces valid C# enum
+
+**InterfaceContract** (NEW)
+- Interface with methods, properties, type constraints
+- Properties: Name, Methods, Properties, BaseInterfaces
+- TypeParameters, TypeConstraints for generics
+- `GenerateCode()` produces valid C# interface
+
+**ModelContract** (NEW)
+- DTO/Model class definition
+- Properties: Name, Properties, IsRecord, BaseClass
+- `GenerateCode()` produces valid C# class/record
+
+**AbstractClassContract** (NEW)
+- Abstract class with abstract/virtual methods
+- Properties: Name, AbstractMethods, VirtualMethods, IsSealed
+- Note: IsSealed=true generates sealed class (not abstract)
+- `GenerateCode()` produces valid C# abstract class
+
+**SymbolCollision** (NEW)
+- Collision information between symbols
+- Properties: SimpleName, ExistingSymbol, NewSymbol, CollisionType
+
+**SymbolCollisionType** (NEW)
+- Enum: DuplicateDefinition, AmbiguousName, MisplacedModel
+
+**ProjectSymbolInfo** (ENHANCED)
 - Symbol information for known types
 - Properties: FullyQualifiedName, Namespace, Name, Kind
 - DefinedByTaskId, Signature
@@ -179,29 +252,153 @@ GenerateCodeAsync()
   ├─> Sends code generation prompt
   └─> Returns C# code snippet
 
+GenerateCodeWithContractsAsync() // NEW - Contract-aware generation
+  ├─> Uses frozen contracts for context
+  ├─> Injects exact interface/abstract signatures
+  ├─> Validates against contracts
+  └─> Returns contract-compliant C# code
+
 RegenerateCodeWithErrorsAsync()
   ├─> Includes validation errors in prompt
   ├─> Requests corrected code
   └─> Returns improved snippet
 
-GenerateTaskSummaryAsync() // NEW
+GenerateTaskSummaryAsync()
   ├─> Analyzes generated code
   ├─> Generates structured JSON summary
   └─> Returns TaskSummaryInfo
 
-GenerateArchitectureSummaryAsync() // NEW
+GenerateArchitectureSummaryAsync()
   ├─> Analyzes all task summaries
   ├─> Generates high-level overview
   └─> Returns markdown summary
 
-DecomposeComplexTaskAsync() // NEW
+DecomposeComplexTaskAsync()
   ├─> Receives task estimated to exceed 300 lines
   ├─> Creates subtask breakdown with OpenAI
   ├─> Manages dependencies between subtasks
   └─> Returns list of smaller TaskNodes
 ```
 
-**TaskComplexityAnalyzer** (NEW)
+**ContractGenerationService** (NEW)
+```csharp
+GenerateContractCatalogAsync()
+  ├─> Analyzes task decomposition
+  ├─> Identifies types needing contracts
+  ├─> Generates enums, interfaces, models
+  ├─> Registers in Symbol Table
+  └─> Returns frozen ContractCatalog
+
+GenerateEnumContractsAsync()
+  ├─> Extracts enum definitions from tasks
+  └─> Returns list of EnumContract
+
+GenerateInterfaceContractsAsync()
+  ├─> Extracts interface definitions
+  ├─> Includes method signatures
+  └─> Returns list of InterfaceContract
+```
+
+**ContractManifestService** (NEW)
+```csharp
+SaveManifestAsync()
+  ├─> Serializes ContractCatalog to JSON
+  └─> Saves to contracts.json
+
+LoadManifestAsync()
+  ├─> Loads JSON manifest
+  └─> Returns ContractCatalog
+
+GenerateContractFilesAsync()
+  ├─> Creates .cs files for each contract
+  └─> Returns list of generated file paths
+
+ValidateEnumMember()
+  ├─> Checks if enum member exists
+  └─> Returns true/false
+
+ValidateInterfaceMethod()
+  ├─> Validates method signature matches
+  └─> Returns MethodValidationResult
+
+IsTypeSealed()
+  └─> Checks if type is sealed in contracts
+```
+
+**PromptContextBuilder** (NEW)
+```csharp
+BuildCodeGenerationContext()
+  ├─> Injects task details
+  ├─> Adds frozen contract signatures
+  ├─> Adds known symbols block
+  ├─> Adds guardrails (DO NOT redefine)
+  └─> Returns enhanced prompt context
+
+BuildInterfaceImplementationContext()
+  ├─> Lists required methods with exact signatures
+  └─> Returns implementation requirements
+
+BuildAbstractClassImplementationContext()
+  ├─> Lists abstract methods to override
+  ├─> Warns if sealed (use composition)
+  └─> Returns override requirements
+
+BuildEnumUsageContext()
+  ├─> Lists valid enum members
+  └─> Returns enum usage requirements
+
+ValidateAgainstContracts()
+  ├─> Checks for redefined types
+  └─> Returns list of violations
+```
+
+**AtomCompilationService** (NEW)
+```csharp
+CompileAtom()
+  ├─> Fast Roslyn compile per file
+  ├─> Classifies diagnostics:
+  │   ├─> SymbolCollision
+  │   ├─> MissingInterfaceMember
+  │   ├─> SignatureMismatch
+  │   ├─> MissingEnumMember
+  │   ├─> SealedInheritance
+  │   └─> Other
+  └─> Returns AtomCompilationResult
+
+ValidateAgainstContracts()
+  ├─> Checks for contract violations
+  └─> Returns list of ContractViolation
+
+GenerateCompilationSummary()
+  └─> Human-readable error summary for LLM
+```
+
+**AutoFixService** (NEW)
+```csharp
+TryAutoFixAsync()
+  ├─> Attempts to fix compilation errors
+  ├─> Retry loop (max 3 attempts)
+  └─> Returns AutoFixResult
+
+TryFixMissingInterfaceMember()
+  ├─> Adds stub implementation
+  └─> Returns (success, newCode)
+
+TryFixMissingAbstractMember()
+  ├─> Adds override stub
+  └─> Returns (success, newCode)
+
+TryFixSealedInheritance()
+  ├─> Converts inheritance to composition
+  ├─> Adds private field for sealed type
+  └─> Returns (success, newCode)
+
+TryFixAmbiguousReference()
+  ├─> Fully qualifies type name
+  └─> Returns (success, newCode)
+```
+
+**TaskComplexityAnalyzer**
 ```csharp
 AnalyzeTask()
   ├─> Estimates line count from task description
@@ -411,21 +608,28 @@ ExecuteAsync()
   ├─> Step 1: Decompose request
   │   ├─> Call OpenAI
   │   └─> Review with user
-  ├─> Step 1.5: Complexity analysis (NEW)
+  ├─> Step 1.25: Contract generation (NEW - when enableContractFirst=true)
+  │   ├─> Analyze tasks for types needing contracts
+  │   ├─> Generate frozen enums, interfaces, models
+  │   ├─> Create ContractCatalog
+  │   ├─> Save contracts.json manifest
+  │   └─> Set up contract-aware OpenAI context
+  ├─> Step 1.5: Complexity analysis
   │   ├─> Analyze each task for complexity
   │   ├─> Decompose tasks >300 lines
   │   └─> Update task list with subtasks
   ├─> Step 2: Execute tasks
-  │   └─> Parallel execution with validation
+  │   ├─> Parallel execution with validation
+  │   └─> Contract-aware code generation (if enabled)
   ├─> Step 3: Validate contracts
   ├─> Step 4: Merge code
   ├─> Step 5: Generate report
-  ├─> Step 6: Synthesize documentation (NEW)
+  ├─> Step 6: Synthesize documentation
   │   ├─> Generate project documentation
   │   ├─> Export markdown
   │   ├─> Export JSON
   │   └─> Export JSONL
-  └─> Return AoTResult with documentation
+  └─> Return AoTResult with documentation and ContractCatalog
 ```
 
 ## Data Flow
@@ -442,7 +646,17 @@ Decomposition (OpenAI)
 User Review & Clarification
     │
     ▼
-Complexity Analysis (NEW)
+Contract Generation (NEW - when enableContractFirst=true)
+    ├─> Analyze tasks for contract needs
+    ├─> Generate frozen enums
+    ├─> Generate frozen interfaces
+    ├─> Generate frozen models
+    ├─> Generate frozen abstract classes
+    ├─> Save contracts.json manifest
+    └─> Set up contract-aware context
+    │
+    ▼
+Complexity Analysis
     ├─> Analyze each task
     ├─> Split tasks >300 lines
     └─> Update dependencies
@@ -454,10 +668,13 @@ Task Graph Construction
 Parallel Execution Loop:
     ├─> Identify Ready Tasks
     ├─> Handle Uncertainties
-    ├─> Generate Code (OpenAI)
+    ├─> Generate Code (OpenAI - contract-aware)
+    ├─> Per-Atom Compilation Check (NEW)
+    ├─> Validate Against Contracts (NEW)
+    ├─> Auto-Fix Loop (NEW)
     ├─> Validate Code (Roslyn)
-    ├─> Track Validation Attempts (NEW)
-    ├─> Generate Task Summary (NEW)
+    ├─> Track Validation Attempts
+    ├─> Generate Task Summary
     ├─> Retry if Failed
     └─> Mark Completed
     │
@@ -474,13 +691,55 @@ Final Validation
 Report Generation
     │
     ▼
-Documentation Synthesis (NEW)
+Documentation Synthesis
     ├─> Project Documentation
     ├─> Architecture Summary
     └─> Training Dataset
     │
     ▼
-Output (Final Code + Report + Documentation)
+Output (Final Code + Report + Documentation + Contracts)
+```
+
+### Contract Generation Flow (NEW)
+
+```
+Task Decomposition Complete
+    │
+    ├─> When enableContractFirst=true
+    │
+    ▼
+Analyze Tasks for Contract Needs
+    ├─> Find types mentioned in multiple tasks
+    ├─> Identify interfaces needed
+    ├─> Identify shared enums
+    ├─> Identify DTOs/models
+    └─> Identify abstract base classes
+    │
+    ▼
+Generate Contract Catalog
+    ├─> EnumContract[] - with member lists
+    ├─> InterfaceContract[] - with method signatures
+    ├─> ModelContract[] - with properties
+    └─> AbstractClassContract[] - with abstract methods
+    │
+    ▼
+Freeze Contracts
+    ├─> Set IsFrozen = true
+    └─> Set FrozenAtUtc timestamp
+    │
+    ▼
+Persist Contracts
+    ├─> Save contracts.json manifest
+    └─> Generate .cs contract files (optional)
+    │
+    ▼
+Set Up Contract-Aware Context
+    ├─> Configure PromptContextBuilder
+    ├─> Register in SymbolTable
+    └─> Update TypeRegistry
+    │
+    ▼
+Continue to Complexity Analysis
 ```
 
 ### Documentation Generation Flow (NEW)
@@ -567,12 +826,20 @@ Synthesize documentation from all summaries
 3. Report deadlock with task details
 4. Throw InvalidOperationException
 
-### Documentation Failures (NEW)
+### Documentation Failures
 1. Catch exceptions during summary generation
 2. Fall back to minimal summary
 3. Log warning but don't fail task
 4. Continue with code generation
 5. Handle file I/O errors gracefully
+
+### Contract Violations (NEW)
+1. Detect missing interface implementations
+2. Detect signature mismatches
+3. Detect invalid enum member usage
+4. Detect sealed type inheritance attempts
+5. Auto-fix loop attempts resolution
+6. Report unresolvable violations to user
 
 ## Configuration
 
@@ -588,7 +855,8 @@ Synthesize documentation from all summaries
     "UseBatchValidation": true,
     "UseHybridValidation": true,
     "MaxLinesPerTask": 300,
-    "EnableComplexityAnalysis": true
+    "EnableComplexityAnalysis": true,
+    "EnableContractFirst": true
   },
   "Documentation": {
     "Enabled": true,
