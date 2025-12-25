@@ -88,7 +88,7 @@ public static class KnownPackageVersions
 
     /// <summary>
     /// Gets the known version for a package, with a default fallback for unknown packages.
-    /// Logs a warning for unknown packages.
+    /// Logs a warning for unknown packages and uses a more conservative fallback strategy.
     /// </summary>
     public static string GetVersionWithFallback(string packageName, string fallbackVersion = "1.0.0")
     {
@@ -97,8 +97,16 @@ public static class KnownPackageVersions
             return version;
         }
         
-        // Log warning for unknown packages
-        Console.WriteLine($"   ⚠️  Unknown package '{packageName}', using fallback version {fallbackVersion}");
+        // Try to infer version for Microsoft packages
+        if (packageName.StartsWith("Microsoft.Extensions.", StringComparison.OrdinalIgnoreCase) ||
+            packageName.StartsWith("Microsoft.EntityFrameworkCore.", StringComparison.OrdinalIgnoreCase))
+        {
+            Console.WriteLine($"   ℹ️  Package '{packageName}' not in known list, using 9.0.0 for .NET 9 compatibility");
+            return "9.0.0";
+        }
+        
+        // Log warning for unknown packages - this helps identify packages that should be added to the known list
+        Console.WriteLine($"   ⚠️  Unknown package '{packageName}', using fallback version {fallbackVersion}. Consider adding this package to KnownPackageVersions.");
         return fallbackVersion;
     }
 }

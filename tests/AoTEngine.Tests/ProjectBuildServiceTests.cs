@@ -4,15 +4,45 @@ using Xunit;
 
 namespace AoTEngine.Tests;
 
-public class ProjectBuildServiceTests
+public class ProjectBuildServiceTests : IDisposable
 {
     private readonly ProjectBuildService _buildService;
     private readonly string _testOutputDirectory;
+    private bool _disposed;
 
     public ProjectBuildServiceTests()
     {
         _buildService = new ProjectBuildService();
         _testOutputDirectory = Path.Combine(Path.GetTempPath(), "AoTEngine_Tests", Guid.NewGuid().ToString());
+    }
+
+    public void Dispose()
+    {
+        Dispose(true);
+        GC.SuppressFinalize(this);
+    }
+
+    protected virtual void Dispose(bool disposing)
+    {
+        if (!_disposed)
+        {
+            if (disposing)
+            {
+                // Cleanup test directory
+                try
+                {
+                    if (Directory.Exists(_testOutputDirectory))
+                    {
+                        Directory.Delete(_testOutputDirectory, true);
+                    }
+                }
+                catch
+                {
+                    // Ignore cleanup errors in tests
+                }
+            }
+            _disposed = true;
+        }
     }
 
     [Fact]
@@ -84,11 +114,7 @@ public class AdvancedCalculator
         }
         finally
         {
-            // Cleanup
-            if (Directory.Exists(_testOutputDirectory))
-            {
-                Directory.Delete(_testOutputDirectory, true);
-            }
+            // Cleanup handled by Dispose
         }
     }
 
@@ -135,14 +161,13 @@ public class JsonHelper
             
             var csprojContent = await File.ReadAllTextAsync(csprojPath);
             Assert.Contains("Newtonsoft.Json", csprojContent);
+            
+            // Verify version was added (escape dots properly in regex)
+            Assert.Matches(@"Newtonsoft\.Json.*Version=""\d+\.\d+(\.\d+)?""", csprojContent);
         }
         finally
         {
-            // Cleanup
-            if (Directory.Exists(_testOutputDirectory))
-            {
-                Directory.Delete(_testOutputDirectory, true);
-            }
+            // Cleanup handled by Dispose
         }
     }
 
@@ -199,14 +224,13 @@ public class LoggerService
             
             var csprojContent = await File.ReadAllTextAsync(csprojPath);
             Assert.Contains("Microsoft.Extensions.Logging", csprojContent);
+            
+            // Verify that a version was added (escape dots properly in regex)
+            Assert.Matches(@"Microsoft\.Extensions\.Logging.*Version=""\d+\.\d+(\.\d+)?""", csprojContent);
         }
         finally
         {
-            // Cleanup
-            if (Directory.Exists(_testOutputDirectory))
-            {
-                Directory.Delete(_testOutputDirectory, true);
-            }
+            // Cleanup handled by Dispose
         }
     }
 
@@ -249,11 +273,7 @@ public class Program
         }
         finally
         {
-            // Cleanup
-            if (Directory.Exists(_testOutputDirectory))
-            {
-                Directory.Delete(_testOutputDirectory, true);
-            }
+            // Cleanup handled by Dispose
         }
     }
 

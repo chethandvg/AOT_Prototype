@@ -110,7 +110,8 @@ public class ProjectBuildService
             using (var createProcess = new Process { StartInfo = createProcessInfo })
             {
                 createProcess.Start();
-                var output = await createProcess.StandardOutput.ReadToEndAsync();
+                // We don't need the output, but we need to read it to avoid deadlock
+                _ = await createProcess.StandardOutput.ReadToEndAsync();
                 var error = await createProcess.StandardError.ReadToEndAsync();
                 await createProcess.WaitForExitAsync();
 
@@ -197,6 +198,7 @@ public class ProjectBuildService
         var packageNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         // Common mappings from using statements to NuGet package names
+        // Note: System.Text.Json is included in .NET 9 BCL and doesn't need a package reference
         var usingToPackageMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
             // Microsoft.Extensions packages
@@ -206,14 +208,14 @@ public class ProjectBuildService
             { "Microsoft.Extensions.Hosting", "Microsoft.Extensions.Hosting" },
             { "Microsoft.Extensions.Http", "Microsoft.Extensions.Http" },
             { "Microsoft.Extensions.Options", "Microsoft.Extensions.Options" },
-            { "Microsoft.Extensions.Caching", "Microsoft.Extensions.Caching.Memory" },
+            { "Microsoft.Extensions.Caching.Memory", "Microsoft.Extensions.Caching.Memory" },
+            { "Microsoft.Extensions.Caching.Abstractions", "Microsoft.Extensions.Caching.Abstractions" },
             
             // Entity Framework Core
             { "Microsoft.EntityFrameworkCore", "Microsoft.EntityFrameworkCore" },
             
-            // JSON
+            // JSON (Newtonsoft.Json requires package, System.Text.Json is in BCL)
             { "Newtonsoft.Json", "Newtonsoft.Json" },
-            { "System.Text.Json", "System.Text.Json" },
             
             // Popular libraries
             { "Dapper", "Dapper" },
@@ -273,20 +275,24 @@ public class ProjectBuildService
     }
 
     /// <summary>
-    /// Extracts using statements from code.
+    /// Extracts using statements from code, including global usings and using aliases.
     /// </summary>
     private List<string> ExtractUsingStatements(string code)
     {
         var usings = new List<string>();
-        var regex = new Regex(@"^using\s+([A-Za-z0-9_.]+);", RegexOptions.Multiline);
+        // Pattern breakdown:
+        // ^                          - Start of line (Multiline mode)
+        // (?:global\s+)?             - Optional "global " prefix
+        // using\s+                   - Required "using " keyword
+        // (?:[A-Za-z_][A-Za-z0-9_]*\s*=\s*)?  - Optional alias (e.g., "Json = ")
+        // ([A-Za-z_][A-Za-z0-9_.]+)  - Capture group: namespace identifier
+        // \s*;                       - Ending semicolon with optional whitespace
+        var regex = new Regex(@"^(?:global\s+)?using\s+(?:[A-Za-z_][A-Za-z0-9_]*\s*=\s*)?([A-Za-z_][A-Za-z0-9_.]+)\s*;", RegexOptions.Multiline);
         var matches = regex.Matches(code);
 
-        foreach (Match match in matches)
+        foreach (Match match in matches.Where(m => m.Groups.Count > 1))
         {
-            if (match.Groups.Count > 1)
-            {
-                usings.Add(match.Groups[1].Value);
-            }
+            usings.Add(match.Groups[1].Value);
         }
 
         return usings;
@@ -295,7 +301,7 @@ public class ProjectBuildService
     /// <summary>
     /// Adds package references to the .csproj file.
     /// </summary>
-    private async Task AddPackageReferencesToCsprojAsync(string csprojPath, Dictionary<string, string> packages)
+    private Task AddPackageReferencesToCsprojAsync(string csprojPath, Dictionary<string, string> packages)
     {
         if (!File.Exists(csprojPath))
         {
@@ -326,28 +332,28 @@ public class ProjectBuildService
             .Where(v => v != null)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
-        // Add new package references
-        foreach (var package in packages)
+        // Add new package references - use explicit Where filter
+        foreach (var package in packages.Where(p => !existingPackages.Contains(p.Key)))
         {
-            if (!existingPackages.Contains(package.Key))
+            // If version is "latest", try to use a sensible default version or omit
+            // Using a concrete version is more reliable than "*" for reproducible builds
+            var version = package.Value;
+            if (version == "latest")
             {
-                // If version is "latest", try to use a sensible default version or omit
-                // Using a concrete version is more reliable than "*" for reproducible builds
-                var version = package.Value;
-                if (version == "latest")
-                {
-                    // Try to get a default version from our known mappings
-                    version = GetDefaultVersionForPackage(package.Key);
-                }
-                
-                var packageRef = new XElement("PackageReference",
-                    new XAttribute("Include", package.Key),
-                    new XAttribute("Version", version));
-                itemGroup.Add(packageRef);
+                // Try to get a default version from our known mappings
+                version = GetDefaultVersionForPackage(package.Key);
             }
+            
+            var packageRef = new XElement("PackageReference",
+                new XAttribute("Include", package.Key),
+                new XAttribute("Version", version));
+            itemGroup.Add(packageRef);
         }
 
-        await File.WriteAllTextAsync(csprojPath, doc.ToString());
+        // Save with proper formatting to maintain readability
+        doc.Save(csprojPath, SaveOptions.None);
+        
+        return Task.CompletedTask;
     }
 
     /// <summary>
@@ -425,18 +431,22 @@ public class ProjectBuildService
 
     /// <summary>
     /// Creates a minimal Program.cs entry point if the generated code doesn't include one.
+    /// Uses more robust detection to avoid false positives from comments or strings.
     /// </summary>
     private async Task CreateEntryPointIfNeededAsync(string projectPath, List<TaskNode> tasks)
     {
         var programPath = Path.Combine(projectPath, "Program.cs");
 
         // Check if any task already generated a Main method or top-level statements
+        // More robust detection that looks for actual entry point patterns
         var hasEntryPoint = tasks.Any(t => 
             !string.IsNullOrWhiteSpace(t.GeneratedCode) &&
-            (t.GeneratedCode.Contains("static void Main") ||
-             t.GeneratedCode.Contains("static async Task Main") ||
-             Regex.IsMatch(t.GeneratedCode, @"^\s*Console\.", RegexOptions.Multiline) ||
-             Regex.IsMatch(t.GeneratedCode, @"^\s*await\s+", RegexOptions.Multiline)));
+            (t.GeneratedCode.Contains("static void Main(") ||
+             t.GeneratedCode.Contains("static async Task Main(") ||
+             t.GeneratedCode.Contains("static Task Main(") ||
+             t.GeneratedCode.Contains("static int Main(") ||
+             // Look for top-level statements pattern (code outside of type declarations at start)
+             HasTopLevelStatements(t.GeneratedCode)));
 
         if (!hasEntryPoint)
         {
@@ -448,6 +458,65 @@ public class ProjectBuildService
     }
 
     /// <summary>
+    /// Detects if code contains top-level statements (code outside of namespace/class declarations).
+    /// </summary>
+    private bool HasTopLevelStatements(string code)
+    {
+        // Remove single-line and multi-line comments to avoid false positives
+        var codeWithoutComments = Regex.Replace(code, @"//.*$", "", RegexOptions.Multiline);
+        codeWithoutComments = Regex.Replace(codeWithoutComments, @"/\*.*?\*/", "", RegexOptions.Singleline);
+        
+        // Remove string literals to avoid false positives
+        codeWithoutComments = Regex.Replace(codeWithoutComments, @"""[^""]*""", "\"\"");
+        codeWithoutComments = Regex.Replace(codeWithoutComments, @"@""[^""]*""", "\"\"");
+        
+        // Check for common top-level statement patterns after using statements
+        // These patterns indicate executable code at the top level
+        var lines = codeWithoutComments.Split('\n');
+        bool passedUsings = false;
+        
+        foreach (var line in lines)
+        {
+            var trimmed = line.Trim();
+            if (string.IsNullOrEmpty(trimmed)) continue;
+            
+            // Skip using statements
+            if (trimmed.StartsWith("using ") && trimmed.EndsWith(";"))
+            {
+                passedUsings = true;
+                continue;
+            }
+            
+            // Skip namespace and class declarations
+            if (trimmed.StartsWith("namespace ") || 
+                trimmed.StartsWith("public ") || 
+                trimmed.StartsWith("internal ") ||
+                trimmed.StartsWith("class ") ||
+                trimmed.StartsWith("interface ") ||
+                trimmed.StartsWith("struct ") ||
+                trimmed.StartsWith("record ") ||
+                trimmed.StartsWith("enum ") ||
+                trimmed.StartsWith("[") ||  // Attributes
+                trimmed == "{" || trimmed == "}")
+            {
+                continue;
+            }
+            
+            // If we've passed usings and see executable code, it's top-level
+            if (passedUsings && 
+                (trimmed.StartsWith("var ") ||
+                 trimmed.StartsWith("await ") ||
+                 trimmed.StartsWith("Console.") ||
+                 trimmed.Contains("(") && trimmed.EndsWith(";")))  // Method call
+            {
+                return true;
+            }
+        }
+        
+        return false;
+    }
+
+    /// <summary>
     /// Generates a minimal entry point that demonstrates the generated types.
     /// </summary>
     private string GenerateMinimalEntryPoint(List<TaskNode> tasks)
@@ -455,13 +524,10 @@ public class ProjectBuildService
         var sb = new StringBuilder();
         var namespaces = new HashSet<string>();
 
-        // Collect namespaces from tasks
-        foreach (var task in tasks)
+        // Collect namespaces from tasks - use explicit Where filter
+        foreach (var task in tasks.Where(t => !string.IsNullOrEmpty(t.Namespace)))
         {
-            if (!string.IsNullOrEmpty(task.Namespace))
-            {
-                namespaces.Add(task.Namespace);
-            }
+            namespaces.Add(task.Namespace);
         }
 
         // Add using statements

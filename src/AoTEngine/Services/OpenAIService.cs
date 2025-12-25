@@ -14,6 +14,11 @@ public class OpenAIService
     private readonly ChatClient _chatClient;
     private readonly ChatClient _codeGenChatClient; // Separate client for code generation with codex-max
     private const int MaxRetries = 3;
+    
+    // Regex for validating semantic version format - compiled once for efficiency
+    private static readonly System.Text.RegularExpressions.Regex VersionRegex = 
+        new System.Text.RegularExpressions.Regex(@"^\d+\.\d+(\.\d+)?(\.\d+)?(-[\w.]+)?(\+[\w.]+)?$", 
+            System.Text.RegularExpressions.RegexOptions.Compiled);
 
     public OpenAIService(string apiKey, string model = "gpt-4")
     {
@@ -685,12 +690,13 @@ Your response MUST be valid JSON with this exact structure:
 
 Rules:
 1. Only return stable versions (no pre-release, alpha, beta, rc versions)
-2. Ensure compatibility with .NET 9 / .NET Standard 2.0+
+2. Ensure compatibility with .NET 9. If a package does not have a .NET 9 target, then choose the latest stable version compatible with .NET Standard 2.0 or higher.
 3. Use the most recent stable version available
-4. Set compatible to false if the package doesn't support .NET 9
+4. Set compatible to false if the package doesn't support .NET 9 or .NET Standard 2.0+
 5. For Microsoft.Extensions.* packages, use version 9.0.0 for .NET 9 compatibility
 6. For Entity Framework Core packages, use version 9.0.0 for .NET 9 compatibility
-7. Return ONLY the JSON, no explanations or additional text";
+7. Version strings must be valid semantic versions (e.g., 1.2.3 or 1.2.3.4)
+8. Return ONLY the JSON, no explanations or additional text";
 
         var packageList = string.Join("\n", packageNames.Select(p => $"- {p}"));
         var userPrompt = $@"Get the latest stable .NET 9 compatible versions for these NuGet packages:
@@ -719,7 +725,8 @@ Return ONLY valid JSON.";
                         Console.WriteLine("⚠️  OpenAI returned no content for package versions, using fallback versions");
                         return GetFallbackVersions(packageNames);
                     }
-                    await Task.Delay(1000 * (attempt + 1));
+                    // Cap delay at 3 seconds max
+                    await Task.Delay(Math.Min(1000 * (attempt + 1), 3000));
                     continue;
                 }
 
@@ -732,16 +739,22 @@ Return ONLY valid JSON.";
                     var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
                     foreach (var pkg in response.Packages.Where(p => p.Compatible))
                     {
-                        result[pkg.Name] = pkg.Version;
+                        // Validate version format before using it (using static compiled regex)
+                        if (!string.IsNullOrEmpty(pkg.Version) && VersionRegex.IsMatch(pkg.Version))
+                        {
+                            result[pkg.Name] = pkg.Version;
+                        }
+                        else
+                        {
+                            Console.WriteLine($"   ⚠️  Invalid version format '{pkg.Version}' for package '{pkg.Name}', using fallback");
+                            result[pkg.Name] = GetFallbackVersion(pkg.Name);
+                        }
                     }
                     
                     // Fill in any missing packages with fallback versions
-                    foreach (var packageName in packageNames)
+                    foreach (var packageName in packageNames.Where(p => !result.ContainsKey(p)))
                     {
-                        if (!result.ContainsKey(packageName))
-                        {
-                            result[packageName] = GetFallbackVersion(packageName);
-                        }
+                        result[packageName] = GetFallbackVersion(packageName);
                     }
                     
                     return result;
@@ -754,7 +767,8 @@ Return ONLY valid JSON.";
                 {
                     return GetFallbackVersions(packageNames);
                 }
-                await Task.Delay(1000 * (attempt + 1));
+                // Cap delay at 3 seconds max to prevent excessive wait times
+                await Task.Delay(Math.Min(1000 * (attempt + 1), 3000));
             }
             catch (JsonException ex)
             {
@@ -763,7 +777,7 @@ Return ONLY valid JSON.";
                 {
                     return GetFallbackVersions(packageNames);
                 }
-                await Task.Delay(1000 * (attempt + 1));
+                await Task.Delay(Math.Min(1000 * (attempt + 1), 3000));
             }
             catch (Exception ex)
             {
@@ -772,7 +786,7 @@ Return ONLY valid JSON.";
                 {
                     return GetFallbackVersions(packageNames);
                 }
-                await Task.Delay(1000 * (attempt + 1));
+                await Task.Delay(Math.Min(1000 * (attempt + 1), 3000));
             }
         }
 
