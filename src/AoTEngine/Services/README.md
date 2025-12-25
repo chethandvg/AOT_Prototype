@@ -24,6 +24,33 @@ Validates generated C# code using Roslyn compilation.
 - `CodeValidatorService.Compilation.cs` - Compilation and assembly resolution (293 lines)
 - `CodeValidatorService.Integration.cs` - Integration validation and linting (216 lines)
 
+### CodeMergerService
+Merges code snippets from multiple tasks with advanced integration capabilities.
+
+**Files (partial classes):**
+- `CodeMergerService.cs` - Basic merge operations and contract validation
+- `CodeMergerService.Integration.cs` - Advanced Parse → Analyze → Fix → Emit pipeline:
+  - Type Registry for tracking types across tasks
+  - Symbol Table for project-wide symbol tracking
+  - Deduplication with multiple resolution strategies
+  - Auto-fix for common integration errors
+
+### IntegrationFixer
+Provides Roslyn-based auto-fix capabilities for common integration errors.
+
+**Files:**
+- `IntegrationFixer.cs` - Auto-fix for:
+  - Duplicate type/interface/member definitions
+  - Missing using statements
+  - Ambiguous type references
+  - Type mismatches
+
+### IntegrationCheckpointHandler
+Handles manual checkpoints for non-trivial conflicts during code integration.
+
+**Files:**
+- `IntegrationCheckpointHandler.cs` - Conflict reporting and user interaction
+
 ### ProjectBuildService
 Creates and builds .NET projects from generated code.
 

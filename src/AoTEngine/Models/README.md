@@ -30,6 +30,20 @@ Models for documentation generation.
 - `ProjectDocumentation.cs` - Complete project documentation
 - `TaskSummaryRecord.cs` - Individual task summary record
 
+### Type Registry and Symbol Table
+Models for tracking types and symbols during code integration.
+
+**Files:**
+- `TypeRegistry.cs` - Registry for tracking types across tasks:
+  - `TypeRegistryEntry` - Type definition metadata
+  - `MemberSignature` - Member signature for conflict detection
+  - `TypeConflict` - Conflict information
+  - `TypeRegistry` - Central registry class
+- `SymbolTable.cs` - Project-wide symbol tracking:
+  - `ProjectSymbolInfo` - Symbol information
+  - `SymbolTable` - Symbol lookup and tracking
+  - `TypeDefinitionMetadata` - Metadata for structured output
+
 ### Configuration Models
 Configuration models for services.
 

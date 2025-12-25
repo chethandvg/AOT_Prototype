@@ -2,7 +2,97 @@
 
 All notable changes and improvements to the AoT Engine project.
 
-## [Latest] - Incremental Checkpoint System
+## [Latest] - Advanced Code Integration Pipeline
+
+### New Features
+
+#### Merge-with-Rules Integration System
+The synthesizer has been upgraded from simple concatenation to a sophisticated merge-with-rules integration pipeline.
+
+- **Parse → Analyze → Fix → Emit Pipeline**: Advanced integration workflow
+  - Parses all generated code snippets into Roslyn syntax trees
+  - Builds Type Registry to track types across all tasks
+  - Detects and resolves conflicts automatically
+  - Applies Roslyn-based auto-fixes
+  - Emits deduplicated, merged code
+
+- **Type Registry**: Central registry for tracking types across tasks
+  - Detects duplicate type/interface/member definitions
+  - Tracks type ownership by task ID
+  - Suggests resolution strategies for conflicts
+  - Prevents "namespace already contains definition" errors
+
+- **Symbol Table**: Project-wide symbol information tracking
+  - Maintains information about all defined types
+  - Generates "Known Types" blocks for prompt injection
+  - Helps prevent model from redefining existing symbols
+  - Enables coherent code generation across tasks
+
+- **Integration Fixer**: Roslyn-based auto-fix capabilities
+  - CS0246: Missing type → Adds using statement
+  - CS0234: Missing namespace → Adds using statement  
+  - CS0104: Ambiguous reference → Fully qualifies type name
+  - CS0111: Duplicate member → Removes duplicate
+  - CS0101: Duplicate type → Removes duplicate
+  - Configurable type-to-namespace mappings
+
+- **Manual Checkpoint Handler**: Interactive conflict resolution
+  - Generates detailed conflict reports with declaration diffs
+  - Lists available resolution options (Keep First, Merge as Partial, Remove Duplicate, Abort)
+  - Interactive mode prompts user for resolution choices
+  - Non-interactive mode uses recommended resolutions
+
+#### New Models
+- **TypeRegistry**: Registry for type tracking and conflict detection
+- **TypeRegistryEntry**: Metadata for registered types including namespace, owner task, members
+- **MemberSignature**: Signature information for conflict detection
+- **TypeConflict**: Information about detected conflicts with resolution suggestions
+- **SymbolTable**: Project-wide symbol tracking
+- **ProjectSymbolInfo**: Symbol information for known types
+- **TypeDefinitionMetadata**: Structured output metadata for validation
+
+#### New Services
+- **IntegrationFixer**: Roslyn-based auto-fix for common integration errors
+- **IntegrationCheckpointHandler**: Manual conflict resolution with interactive prompts
+
+#### Enhanced CodeMergerService
+- New `MergeWithIntegrationAsync()` method for advanced integration
+- Type Registry and Symbol Table integration
+- Multiple conflict resolution strategies:
+  - `KeepFirst` - Keep first definition, discard duplicates
+  - `MergeAsPartial` - Convert compatible classes to partial classes
+  - `RemoveDuplicate` - Remove conflicting members
+  - `FailFast` - Fail for unresolvable conflicts
+- Configurable via `MergeOptions`:
+  - `AutoResolveKeepFirst` - Automatically keep first definition
+  - `EnablePartialClassMerge` - Enable partial class merging
+  - `EnableAutoFix` - Enable automatic error fixing
+  - `FailOnUnresolvableConflicts` - Fail if conflicts can't be resolved
+  - `EnableManualCheckpoints` - Enable user intervention for complex conflicts
+
+#### Usage Example
+```csharp
+var mergeResult = await mergerService.MergeWithIntegrationAsync(tasks, new MergeOptions
+{
+    AutoResolveKeepFirst = true,
+    EnablePartialClassMerge = true,
+    EnableAutoFix = true,
+    EnableManualCheckpoints = true
+});
+
+// Access conflict information
+foreach (var conflict in mergeResult.Conflicts)
+{
+    Console.WriteLine($"{conflict.FullyQualifiedName}: {conflict.SuggestedResolution}");
+}
+```
+
+### Tests Added
+- 27 new tests covering TypeRegistry, SymbolTable, IntegrationFixer, and IntegrationCheckpointHandler
+
+---
+
+## [Previous] - Incremental Checkpoint System
 
 ### New Features
 

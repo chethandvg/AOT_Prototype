@@ -427,19 +427,118 @@ The project implements a layered database service architecture...
 ### Issue: Code Compilation Errors
 **Solution:** The validator uses Roslyn; ensure generated code follows C# syntax. The engine will retry up to 3 times with error feedback.
 
-### Issue: Documentation Generation Fails (NEW)
+### Issue: Documentation Generation Fails
 **Solution:** Documentation failures don't affect code generation. Check console for warnings. Ensure OpenAI API is accessible for summary generation.
 
-### Issue: Empty Training Dataset (NEW)
+### Issue: Empty Training Dataset
 **Solution:** Ensure `ExportJsonl` is enabled and tasks have generated code. Check output directory permissions.
 
-### Issue: Task Automatically Split (NEW)
+### Issue: Task Automatically Split
 **Explanation:** Tasks estimated to generate more than 300 lines are automatically decomposed into smaller subtasks. This is expected behavior and helps maintain code manageability.
 
-### Issue: Unexpected Subtask Count (NEW)
+### Issue: Unexpected Subtask Count
 **Solution:** Adjust `MaxLinesPerTask` in configuration. Lower values create more subtasks, higher values allow larger code blocks. Default is 300 lines.
 
-## Checkpoint System (NEW)
+### Issue: Duplicate Type Definitions (NEW)
+**Solution:** The enhanced code integration pipeline automatically detects and resolves duplicate type definitions. Use `MergeWithIntegrationAsync()` for advanced conflict resolution. Check the `Conflicts` property in `MergeResult` for detected conflicts.
+
+### Issue: Missing Using Statements After Merge (NEW)
+**Solution:** The IntegrationFixer automatically adds missing using statements. Ensure `EnableAutoFix = true` in `MergeOptions`.
+
+### Issue: Ambiguous Type References (NEW)
+**Solution:** When types with the same name exist in multiple namespaces, the IntegrationFixer can fully qualify type names. You can also add custom type-to-namespace mappings using `IntegrationFixer.AddTypeNamespaceMapping()`.
+
+## Advanced Code Integration (NEW)
+
+The code integration system has been upgraded from simple concatenation to a sophisticated merge-with-rules pipeline.
+
+### Using Advanced Integration
+
+```csharp
+var mergerService = new CodeMergerService(validatorService);
+
+// Use the advanced integration pipeline
+var mergeResult = await mergerService.MergeWithIntegrationAsync(tasks, new MergeOptions
+{
+    AutoResolveKeepFirst = true,      // Automatically keep first definition
+    EnablePartialClassMerge = true,   // Convert compatible duplicates to partial classes
+    EnableAutoFix = true,             // Enable Roslyn-based auto-fixes
+    FailOnUnresolvableConflicts = false,  // Continue even with conflicts
+    EnableManualCheckpoints = true    // Enable interactive conflict resolution
+});
+
+if (mergeResult.Success)
+{
+    Console.WriteLine("Merge successful!");
+    Console.WriteLine(mergeResult.MergedCode);
+}
+else
+{
+    Console.WriteLine("Merge completed with issues:");
+    foreach (var error in mergeResult.RemainingErrors)
+    {
+        Console.WriteLine($"  - {error}");
+    }
+}
+
+// Review what was fixed
+foreach (var fix in mergeResult.AppliedFixes)
+{
+    Console.WriteLine($"Applied fix: {fix}");
+}
+
+// Review detected conflicts
+foreach (var conflict in mergeResult.Conflicts)
+{
+    Console.WriteLine($"Conflict: {conflict.FullyQualifiedName}");
+    Console.WriteLine($"  Resolution: {conflict.SuggestedResolution}");
+}
+```
+
+### Conflict Resolution Strategies
+
+| Strategy | Description | When Used |
+|----------|-------------|-----------|
+| `KeepFirst` | Keep the first definition, discard duplicates | Interfaces, enums, records |
+| `MergeAsPartial` | Convert both definitions to partial classes | Classes with non-conflicting members |
+| `RemoveDuplicate` | Remove the duplicate member | Conflicting constructors/methods |
+| `FailFast` | Fail the merge operation | Unresolvable conflicts |
+
+### Interactive Conflict Resolution
+
+For complex conflicts, enable manual checkpoints:
+
+```csharp
+var checkpointHandler = new IntegrationCheckpointHandler(interactive: true);
+
+var mergeResult = await mergerService.MergeWithIntegrationAsync(
+    tasks, 
+    new MergeOptions { EnableManualCheckpoints = true },
+    checkpointHandler);
+```
+
+The handler will display conflicts and prompt for resolution:
+
+```
+═══════════════════════════════════════════════════════════════════════
+                    INTEGRATION CONFLICTS DETECTED                      
+═══════════════════════════════════════════════════════════════════════
+
+Conflict 1 of 2:
+  Type: MyApp.IValidator
+  Description: Type 'MyApp.IValidator' is defined in both task 'task1' and task 'task2'
+  
+  Recommended: Keep the first definition and discard the duplicate
+
+  Available options:
+    [K] Keep first definition, discard duplicate
+    [R] Remove the duplicate
+    [A] Abort the merge operation
+
+Enter option [K/R/A] (default: K): 
+```
+
+## Checkpoint System
 
 The checkpoint system automatically saves execution state during task execution, enabling progress tracking and recovery.
 

@@ -100,4 +100,14 @@ public partial class CodeValidatorService
 
         return config;
     }
+
+    /// <summary>
+    /// Gets the default metadata references for code compilation.
+    /// </summary>
+    /// <returns>List of metadata references.</returns>
+    public List<MetadataReference> GetDefaultReferences()
+    {
+        // Return a basic set of references for validation
+        return _assemblyManager.GetReferencesForCode("");
+    }
 }

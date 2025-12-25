@@ -5,8 +5,9 @@ namespace AoTEngine.Services;
 
 /// <summary>
 /// Service for merging code snippets and validating contracts.
+/// This is the main partial class; see CodeMergerService.Integration.cs for advanced integration features.
 /// </summary>
-public class CodeMergerService
+public partial class CodeMergerService
 {
     private readonly CodeValidatorService _validatorService;
 

@@ -37,7 +37,15 @@ The AoT Engine is a sophisticated C# application that leverages OpenAI's GPT mod
 - Allows review and confirmation of task decomposition
 - Supports user choices for ambiguous requirements
 
-### 5. **Code Integration**
+### 5. **Code Integration** ⚠️ ENHANCED
+- Advanced Parse → Analyze → Fix → Emit pipeline
+- **Type Registry**: Tracks types across tasks, detects duplicates
+- **Symbol Table**: Maintains project-wide symbol information
+- **Auto-fix**: Roslyn-based automatic fixing of common integration errors:
+  - Duplicate type/interface/member definitions
+  - Missing using statements  
+  - Ambiguous type references
+- **Manual Checkpoints**: Interactive conflict resolution for non-trivial cases
 - Validates contracts between code snippets
 - Merges all snippets into a cohesive solution
 - Generates execution reports
@@ -71,18 +79,23 @@ AoTEngine/
 │   ├── TaskNode.cs            # Represents atomic task in DAG
 │   ├── TaskSummaryRecord.cs   # Structured task documentation
 │   ├── ProjectDocumentation.cs # Project-level documentation
-│   ├── CheckpointData.cs      # Checkpoint snapshot structure (NEW)
+│   ├── CheckpointData.cs      # Checkpoint snapshot structure
 │   ├── ComplexityMetrics.cs   # Task complexity analysis metrics
 │   ├── TaskDecompositionStrategy.cs # Decomposition strategies
 │   ├── TaskDecompositionRequest.cs
 │   ├── TaskDecompositionResponse.cs
+│   ├── TypeRegistry.cs        # Type tracking & conflict detection (NEW)
+│   ├── SymbolTable.cs         # Project-wide symbol information (NEW)
 │   └── ValidationResult.cs
 ├── Services/                   # Core services
 │   ├── OpenAIService.cs       # OpenAI API integration
 │   ├── CodeValidatorService.cs # Code compilation & validation
 │   ├── CodeMergerService.cs   # Code merging & contract validation
+│   ├── CodeMergerService.Integration.cs # Advanced integration pipeline (NEW)
+│   ├── IntegrationFixer.cs    # Roslyn-based auto-fix (NEW)
+│   ├── IntegrationCheckpointHandler.cs # Manual conflict resolution (NEW)
 │   ├── DocumentationService.cs # Documentation generation
-│   ├── CheckpointService.cs   # Checkpoint management (NEW)
+│   ├── CheckpointService.cs   # Checkpoint management
 │   ├── TaskComplexityAnalyzer.cs # Complexity analysis service
 │   ├── AutoDecomposer.cs      # Automatic task decomposition
 │   └── UserInteractionService.cs # Handles user input for uncertainties
@@ -277,13 +290,17 @@ dotnet test
    - Validation notes track retry attempts
    - Dependency summaries used as context for coherence
 
-6. **Integration Phase**
-   - Contracts between tasks are validated
-   - Code snippets are merged
+6. **Integration Phase** ⚠️ ENHANCED
+   - Parse → Analyze → Fix → Emit pipeline for robust integration
+   - Type Registry tracks types across tasks to prevent duplicates
+   - Automatic conflict detection and resolution strategies
+   - Auto-fix for missing usings, duplicate definitions, ambiguous references
+   - Manual checkpoint support for non-trivial conflicts
+   - Code snippets are merged into cohesive solution
    - Final solution is compiled
    - Execution report is generated
 
-7. **Documentation Export Phase** ⚠️ NEW
+7. **Documentation Export Phase**
    - Project-level documentation synthesized
    - Architecture summary generated
    - Documentation exported to multiple formats

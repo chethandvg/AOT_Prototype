@@ -91,29 +91,66 @@ The AoT (Atom of Thought) Engine is designed around six core principles:
 **TaskNode**
 - Represents an atomic task in the DAG
 - Properties: Id, Description, Dependencies, GeneratedCode, ValidationStatus
-- **NEW**: Summary, SummaryModel, ValidationAttemptCount, SummaryGeneratedAtUtc
+- Summary, SummaryModel, ValidationAttemptCount, SummaryGeneratedAtUtc
 - Tracks: Completion status, retry count, validation errors
 
-**ComplexityMetrics** (NEW)
+**ComplexityMetrics**
 - Task complexity analysis results
 - Properties: EstimatedLineCount, ExpectedTypeCount, DependencyCount
 - EstimatedMethodCount, ComplexityScore (0-100), RequiresDecomposition
 - RecommendedSubtaskCount, MaxLineThreshold (default: 300)
 - Used to determine if task needs splitting
 
-**TaskDecompositionStrategy** (NEW)
+**TaskDecompositionStrategy**
 - Decomposition strategy for complex tasks
 - Types: Functional, PartialClass, InterfaceBased, LayerBased
 - Properties: OriginalTaskId, Subtasks, PartialClassConfig
 - Manages shared state and dependencies between subtasks
 
-**TaskSummaryRecord** (NEW)
+**TypeRegistry** (NEW)
+- Central registry for tracking types across tasks
+- Detects duplicate type definitions and member conflicts
+- Properties: Types (dictionary), Conflicts (list)
+- Resolution strategies: KeepFirst, MergeAsPartial, RemoveDuplicate, FailFast
+- Prevents "namespace already contains definition" errors
+
+**TypeRegistryEntry** (NEW)
+- Metadata for registered types
+- Properties: TypeName, Namespace, FullyQualifiedName, Kind
+- OwnerTaskId, IsPartial, Members, SyntaxNode
+- Tracks type ownership for conflict resolution
+
+**MemberSignature** (NEW)
+- Signature information for class members
+- Properties: Name, Kind (Constructor/Method/Property/Field), ParameterTypes
+- SignatureKey for conflict detection
+- Prevents duplicate member definitions
+
+**TypeConflict** (NEW)
+- Information about detected type conflicts
+- Properties: FullyQualifiedName, ConflictType, SuggestedResolution
+- ExistingEntry, NewEntry, ConflictingMembers
+- Used by IntegrationCheckpointHandler for resolution
+
+**SymbolTable** (NEW)
+- Project-wide symbol tracking
+- Properties: Symbols (dictionary)
+- Generates "Known Types" blocks for prompt injection
+- Helps prevent model from redefining existing symbols
+
+**ProjectSymbolInfo** (NEW)
+- Symbol information for known types
+- Properties: FullyQualifiedName, Namespace, Name, Kind
+- DefinedByTaskId, Signature
+- Used for context injection into subsequent prompts
+
+**TaskSummaryRecord**
 - Structured summary for each task
 - Properties: TaskId, TaskDescription, Purpose, KeyBehaviors, EdgeCases
 - ValidationNotes, GeneratedCodeHash, SummaryModel, CreatedUtc
 - Used for documentation and training data export
 
-**ProjectDocumentation** (NEW)
+**ProjectDocumentation**
 - Project-level documentation container
 - Properties: ProjectRequest, Description, TaskRecords, ModuleIndex
 - HighLevelArchitectureSummary, DependencyGraphSummary
@@ -209,13 +246,25 @@ LintCode()
   └─> Returns warnings
 ```
 
-**CodeMergerService**
+**CodeMergerService** (ENHANCED)
 ```csharp
 MergeCodeSnippetsAsync()
   ├─> Extracts using statements
   ├─> Organizes by namespace
   ├─> Merges into cohesive solution
   └─> Validates merged code
+
+MergeWithIntegrationAsync() // NEW - Advanced integration pipeline
+  ├─> Parse all code snippets into syntax trees
+  ├─> Build Type Registry and detect conflicts
+  ├─> Apply conflict resolution strategies:
+  │   ├─> KeepFirst - Keep first definition, discard duplicates
+  │   ├─> MergeAsPartial - Convert to partial classes
+  │   ├─> RemoveDuplicate - Remove conflicting members
+  │   └─> FailFast - Fail for unresolvable conflicts
+  ├─> Apply auto-fixes using Roslyn
+  ├─> Emit deduplicated merged code
+  └─> Return MergeResult with conflicts and applied fixes
 
 ValidateContracts()
   ├─> Checks dependency satisfaction
@@ -226,7 +275,55 @@ CreateExecutionReport()
   └─> Generates summary statistics
 ```
 
-**DocumentationService** (NEW)
+**IntegrationFixer** (NEW)
+```csharp
+TryFix()
+  ├─> Analyzes Roslyn diagnostics
+  ├─> Classifies errors into fixable buckets
+  ├─> Applies deterministic auto-fixes:
+  │   ├─> CS0246: Missing type → Add using statement
+  │   ├─> CS0234: Missing namespace → Add using statement
+  │   ├─> CS0104: Ambiguous reference → Fully qualify type
+  │   ├─> CS0111: Duplicate member → Remove duplicate
+  │   └─> CS0101: Duplicate type → Remove duplicate
+  └─> Returns IntegrationFixResult
+
+AddMissingUsings()
+  ├─> Parses code with Roslyn
+  ├─> Identifies existing usings
+  ├─> Adds missing namespace imports
+  └─> Returns updated code
+
+RemoveDuplicateTypes()
+  ├─> Finds duplicate type declarations
+  ├─> Removes based on conflict resolution
+  └─> Returns deduplicated code
+
+ConvertToPartialClasses()
+  ├─> Identifies classes to convert
+  ├─> Adds partial modifier
+  └─> Returns updated code
+```
+
+**IntegrationCheckpointHandler** (NEW)
+```csharp
+GenerateConflictReports()
+  ├─> Creates detailed conflict reports
+  ├─> Includes declaration diffs
+  ├─> Lists available resolution options
+  └─> Returns list of ConflictReport
+
+PromptForResolutionAsync()
+  ├─> Displays conflict reports to user
+  ├─> Prompts for resolution choice
+  ├─> Collects user selections
+  └─> Returns CheckpointResult with resolutions
+
+RequiresManualIntervention()
+  └─> Determines if conflicts need human review
+```
+
+**DocumentationService**
 ```csharp
 GenerateTaskSummaryAsync()
   ├─> Validates input (task, dependencies)
