@@ -50,7 +50,23 @@ The AoT Engine is a sophisticated C# application that leverages OpenAI's GPT mod
 - Merges all snippets into a cohesive solution
 - Generates execution reports
 
-### 6. **Documentation Generation**
+### 6. **Contract-First Generation** ⚠️ NEW
+- **Frozen Contracts**: Generate and freeze interfaces, enums, models, and abstract classes before implementations
+- **Contract Catalog**: Central registry of all API surface contracts
+- **Enum Governance**: Prevents invalid enum member references
+- **Interface Compliance**: Ensures all interface methods are implemented with exact signatures
+- **Abstract Method Enforcement**: Validates abstract method overrides match base class signatures
+- **Sealed Type Detection**: Prevents inheritance from sealed classes, suggests composition
+- **Ambiguity Prevention**: Detects and resolves type name collisions across namespaces
+- **Contract Manifest**: Save/load contracts in JSON format for reproducibility
+
+### 7. **Per-Atom Compilation Check** ⚠️ NEW
+- Fast Roslyn compile after each file generation
+- Classified diagnostics (SymbolCollision, MissingInterfaceMember, SignatureMismatch, etc.)
+- Early failure detection before batch validation
+- Auto-fix loop with compiler-driven patching
+
+### 8. **Documentation Generation**
 - Generates per-task summaries after code validation
 - Synthesizes project-level architecture documentation
 - Exports documentation in multiple formats:
@@ -59,7 +75,7 @@ The AoT Engine is a sophisticated C# application that leverages OpenAI's GPT mod
   - **JSONL** (`training_data.jsonl`) - Fine-tuning dataset for ML models
 - Uses dependency summaries as context for better task coherence
 
-### 7. **Incremental Checkpoint System** ⚠️ NEW
+### 7. **Incremental Checkpoint System**
 - Automatically saves execution state after each task completion
 - Creates both JSON and Markdown checkpoint files
 - Enables progress tracking and execution recovery
@@ -84,16 +100,23 @@ AoTEngine/
 │   ├── TaskDecompositionStrategy.cs # Decomposition strategies
 │   ├── TaskDecompositionRequest.cs
 │   ├── TaskDecompositionResponse.cs
-│   ├── TypeRegistry.cs        # Type tracking & conflict detection (NEW)
-│   ├── SymbolTable.cs         # Project-wide symbol information (NEW)
+│   ├── TypeRegistry.cs        # Type tracking & conflict detection
+│   ├── SymbolTable.cs         # Project-wide symbol information (ENHANCED)
+│   ├── ContractCatalog.cs     # Frozen contract definitions (NEW)
 │   └── ValidationResult.cs
 ├── Services/                   # Core services
 │   ├── OpenAIService.cs       # OpenAI API integration
+│   ├── OpenAIService.ContractAware.cs # Contract-aware code generation (NEW)
 │   ├── CodeValidatorService.cs # Code compilation & validation
 │   ├── CodeMergerService.cs   # Code merging & contract validation
-│   ├── CodeMergerService.Integration.cs # Advanced integration pipeline (NEW)
-│   ├── IntegrationFixer.cs    # Roslyn-based auto-fix (NEW)
-│   ├── IntegrationCheckpointHandler.cs # Manual conflict resolution (NEW)
+│   ├── CodeMergerService.Integration.cs # Advanced integration pipeline
+│   ├── IntegrationFixer.cs    # Roslyn-based auto-fix
+│   ├── IntegrationCheckpointHandler.cs # Manual conflict resolution
+│   ├── ContractGenerationService.cs # Contract-first generation (NEW)
+│   ├── ContractManifestService.cs # Contract save/load (NEW)
+│   ├── PromptContextBuilder.cs # Enhanced prompt context (NEW)
+│   ├── AtomCompilationService.cs # Per-atom Roslyn compile (NEW)
+│   ├── AutoFixService.cs      # Auto-fix loop service (NEW)
 │   ├── DocumentationService.cs # Documentation generation
 │   ├── CheckpointService.cs   # Checkpoint management
 │   ├── TaskComplexityAnalyzer.cs # Complexity analysis service
@@ -223,7 +246,8 @@ dotnet test
     "UseBatchValidation": true,
     "UseHybridValidation": true,
     "MaxLinesPerTask": 300,
-    "EnableComplexityAnalysis": true
+    "EnableComplexityAnalysis": true,
+    "EnableContractFirst": true
   },
   "Documentation": {
     "Enabled": true,
@@ -237,12 +261,13 @@ dotnet test
   }
 }
 
-### Complexity Analysis Configuration
+### Engine Configuration
 
 | Setting | Default | Description |
 |---------|---------|-------------|
 | `MaxLinesPerTask` | `300` | Maximum lines of code per generated task |
 | `EnableComplexityAnalysis` | `true` | Enable automatic task complexity analysis and decomposition |
+| `EnableContractFirst` | `false` | Enable Contract-First code generation (recommended for large projects) |
 ```
 
 ### Documentation Configuration
@@ -272,25 +297,35 @@ dotnet test
    - User is prompted for clarification
    - Context is enriched with clarifications
 
-3. **Execution Phase**
+3. **Contract Generation Phase** ⚠️ NEW (when enableContractFirst=true)
+   - Analyzes all tasks to identify types needing contracts
+   - Generates frozen contracts: enums, interfaces, models, abstract classes
+   - Creates Contract Catalog with all API surface definitions
+   - Saves contract manifest (contracts.json) for reproducibility
+   - Registers all types in Symbol Table for collision detection
+
+4. **Execution Phase**
    - Tasks are organized in topological order
    - Independent tasks execute in parallel
-   - Each task receives only necessary context
-   - Code is generated via OpenAI
+   - Each task receives contracts + only necessary context
+   - Code is generated via OpenAI with contract-aware prompts
+   - Per-atom compilation check validates each file immediately
 
-4. **Validation Phase**
+5. **Validation Phase**
    - Generated code is compiled using Roslyn
+   - Contract violations are detected (missing interface members, invalid enum usage, etc.)
    - Linting checks are performed
+   - Auto-fix loop attempts to resolve common issues
    - If validation fails, re-prompt with errors
    - Retry up to MaxRetries times
 
-5. **Documentation Phase** ⚠️ NEW
+6. **Documentation Phase**
    - Per-task summaries generated after validation
    - Summaries include purpose, key behaviors, edge cases
    - Validation notes track retry attempts
    - Dependency summaries used as context for coherence
 
-6. **Integration Phase** ⚠️ ENHANCED
+7. **Integration Phase**
    - Parse → Analyze → Fix → Emit pipeline for robust integration
    - Type Registry tracks types across tasks to prevent duplicates
    - Automatic conflict detection and resolution strategies
@@ -300,7 +335,7 @@ dotnet test
    - Final solution is compiled
    - Execution report is generated
 
-7. **Documentation Export Phase**
+8. **Documentation Export Phase**
    - Project-level documentation synthesized
    - Architecture summary generated
    - Documentation exported to multiple formats
@@ -317,6 +352,8 @@ When an output directory is specified, the engine generates:
 | `Documentation.md` | Human-readable project documentation |
 | `Documentation.json` | Structured JSON documentation |
 | `training_data.jsonl` | Fine-tuning dataset (one line per task) |
+| `contracts.json` | Contract manifest (when Contract-First enabled) |
+| `<Namespace>/<Type>.cs` | Individual contract files (when Contract-First enabled) |
 
 ### Training Dataset Format (JSONL)
 
@@ -409,6 +446,9 @@ Merged Code Lines: 142
 - [x] Fine-tuning dataset export
 - [x] **Task complexity analysis** - Automatic detection of complex tasks
 - [x] **Automatic decomposition** - Split complex tasks into ≤300 line subtasks
+- [x] **Contract-First generation** - Freeze API contracts before implementations
+- [x] **Per-atom compilation** - Validate each file immediately after generation
+- [x] **Auto-fix loop** - Compiler-driven patching for common errors
 - [ ] Actual unit test execution
 - [ ] Support for multiple programming languages
 - [ ] Integration with CI/CD pipelines
