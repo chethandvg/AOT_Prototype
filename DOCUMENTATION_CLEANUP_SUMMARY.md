@@ -148,6 +148,7 @@ All information from the removed files has been consolidated and preserved in th
 - **Quick references** ? CHANGELOG.md (Commands section)
 - **Performance metrics** ? CHANGELOG.md
 - **Known issues** ? CHANGELOG.md (Limitations section)
+- **Complexity analysis** ? CHANGELOG.md, ARCHITECTURE.md, USAGE.md (NEW)
 
 ## Maintenance Going Forward
 

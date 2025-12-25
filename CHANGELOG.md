@@ -2,7 +2,72 @@
 
 All notable changes and improvements to the AoT Engine project.
 
-## [Latest] - Documentation Layer
+## [Latest] - Task Complexity Analysis & Automatic Decomposition
+
+### New Features
+
+#### Task Complexity Analyzer (NEW)
+- **Automatic Complexity Detection**: Analyzes tasks to estimate code line count
+- **Complexity Scoring**: 0-100 scale based on type count, method count, dependencies
+- **Smart Decomposition Triggers**: Tasks exceeding 300 lines automatically flagged
+- **Decomposition Strategies**: 
+  - Functional decomposition (multiple types)
+  - Partial class decomposition (single large class)
+  - Interface-based splitting
+  - Layer-based decomposition
+
+#### New Models
+- **ComplexityMetrics**: Task complexity analysis results
+  - EstimatedLineCount, ExpectedTypeCount, DependencyCount
+  - EstimatedMethodCount, ComplexityScore (0-100)
+  - RequiresDecomposition, RecommendedSubtaskCount
+  - MaxLineThreshold (default: 300 lines)
+- **TaskDecompositionStrategy**: Decomposition configuration
+  - DecompositionType (Functional, PartialClass, InterfaceBased, LayerBased)
+  - Subtasks, PartialClassConfig, SharedState
+  - EstimatedTotalLines, IsSuccessful
+
+#### New Services
+- **TaskComplexityAnalyzer**: Complexity analysis service
+  - `AnalyzeTask()`: Returns complexity metrics for a task
+  - `AnalyzeTasksForDecomposition()`: Batch analysis for decomposition needs
+  - Compiled regex patterns for performance optimization
+- **AutoDecomposer**: Automatic task decomposition
+  - `DecomposeComplexTaskAsync()`: Splits complex tasks using OpenAI
+  - `ReplaceWithSubtasks()`: Updates task list with subtasks
+  - Circular dependency detection
+  - Partial class configuration management
+
+#### Pipeline Integration
+- **ParallelExecutionEngine**: Added `AnalyzeAndDecomposeComplexTasksAsync()`
+  - Pre-execution complexity checking
+  - Automatic task splitting
+  - Dependency graph updates
+- **AoTEngineOrchestrator**: Added Step 1.5 for complexity analysis
+  - New parameters: `maxLinesPerTask` (default: 300), `enableComplexityAnalysis` (default: true)
+- **OpenAIService**: Added `DecomposeComplexTaskAsync()`
+  - LLM-powered task decomposition
+  - Retry logic with exponential backoff
+
+#### Configuration
+```json
+{
+  "Engine": {
+    "MaxLinesPerTask": 300,
+    "EnableComplexityAnalysis": true
+  }
+}
+```
+
+### Improvements
+- Compiled static regex patterns for performance
+- Null safety checks throughout decomposition logic
+- Safety margin (10 lines) for line count estimation
+- Comprehensive unit tests for TaskComplexityAnalyzer
+
+---
+
+## [Previous] - Documentation Layer
 
 ### New Features
 
@@ -247,6 +312,7 @@ rm -rf bin/ obj/
 
 ## Future Roadmap
 
+- [x] Task complexity analysis and automatic decomposition
 - [ ] Multi-language support (Python, JavaScript, Java)
 - [ ] Actual test execution with test frameworks
 - [ ] CI/CD pipeline integration
@@ -276,6 +342,8 @@ None in current version.
 - ? Improved assembly reference resolution
 - ? Enhanced error filtering and retry logic
 - ? Optimized build output directory handling
+- ? Task complexity analysis and automatic decomposition
+- ? Maximum 300 lines per task enforcement
 
 ### In Progress
 - ?? Caching layer for OpenAI responses

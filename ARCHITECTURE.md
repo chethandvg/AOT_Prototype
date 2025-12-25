@@ -2,12 +2,13 @@
 
 ## System Overview
 
-The AoT (Atom of Thought) Engine is designed around five core principles:
+The AoT (Atom of Thought) Engine is designed around six core principles:
 1. **Decomposition**: Break complex tasks into atomic units
 2. **Parallelism**: Execute independent tasks concurrently
 3. **Validation**: Ensure code quality through compilation and linting
 4. **Interaction**: Engage users when uncertainties arise
 5. **Documentation**: Generate structured documentation and training data
+6. **Complexity Management**: Ensure tasks stay within manageable size limits (≤300 lines)
 
 ## Architecture Diagram
 
@@ -69,6 +70,18 @@ The AoT (Atom of Thought) Engine is designed around five core principles:
               │ • Export JSON       │
               │ • Export JSONL      │
               └─────────────────────┘
+                        │
+                        ▼
+              ┌─────────────────────┐
+              │  Task Complexity    │
+              │  Analyzer (NEW)     │
+              │                     │
+              │ • Line Count Est    │
+              │ • Complexity Score  │
+              │ • Type/Method Count │
+              │ • Auto-decompose    │
+              │ • Max 300 lines     │
+              └─────────────────────┘
 ```
 
 ## Component Details
@@ -80,6 +93,19 @@ The AoT (Atom of Thought) Engine is designed around five core principles:
 - Properties: Id, Description, Dependencies, GeneratedCode, ValidationStatus
 - **NEW**: Summary, SummaryModel, ValidationAttemptCount, SummaryGeneratedAtUtc
 - Tracks: Completion status, retry count, validation errors
+
+**ComplexityMetrics** (NEW)
+- Task complexity analysis results
+- Properties: EstimatedLineCount, ExpectedTypeCount, DependencyCount
+- EstimatedMethodCount, ComplexityScore (0-100), RequiresDecomposition
+- RecommendedSubtaskCount, MaxLineThreshold (default: 300)
+- Used to determine if task needs splitting
+
+**TaskDecompositionStrategy** (NEW)
+- Decomposition strategy for complex tasks
+- Types: Functional, PartialClass, InterfaceBased, LayerBased
+- Properties: OriginalTaskId, Subtasks, PartialClassConfig
+- Manages shared state and dependencies between subtasks
 
 **TaskSummaryRecord** (NEW)
 - Structured summary for each task
@@ -130,6 +156,43 @@ GenerateArchitectureSummaryAsync() // NEW
   ├─> Analyzes all task summaries
   ├─> Generates high-level overview
   └─> Returns markdown summary
+
+DecomposeComplexTaskAsync() // NEW
+  ├─> Receives task estimated to exceed 300 lines
+  ├─> Creates subtask breakdown with OpenAI
+  ├─> Manages dependencies between subtasks
+  └─> Returns list of smaller TaskNodes
+```
+
+**TaskComplexityAnalyzer** (NEW)
+```csharp
+AnalyzeTask()
+  ├─> Estimates line count from task description
+  ├─> Calculates type and method complexity
+  ├─> Computes complexity score (0-100)
+  ├─> Determines if decomposition needed (>300 lines)
+  └─> Returns ComplexityMetrics
+
+AnalyzeTasksForDecomposition()
+  ├─> Analyzes all tasks in batch
+  ├─> Filters tasks needing decomposition
+  └─> Returns list of complex tasks
+```
+
+**AutoDecomposer** (NEW)
+```csharp
+DecomposeComplexTaskAsync()
+  ├─> Determines best decomposition strategy
+  ├─> Calls OpenAI for intelligent splitting
+  ├─> Validates subtasks for circular dependencies
+  ├─> Sets up partial class configuration if needed
+  └─> Returns TaskDecompositionStrategy
+
+DetermineDecompositionType()
+  ├─> Functional: Multiple independent types
+  ├─> PartialClass: Single large class
+  ├─> InterfaceBased: Interface + implementation
+  └─> LayerBased: Multi-layer service
 ```
 
 **CodeValidatorService**
@@ -251,6 +314,10 @@ ExecuteAsync()
   ├─> Step 1: Decompose request
   │   ├─> Call OpenAI
   │   └─> Review with user
+  ├─> Step 1.5: Complexity analysis (NEW)
+  │   ├─> Analyze each task for complexity
+  │   ├─> Decompose tasks >300 lines
+  │   └─> Update task list with subtasks
   ├─> Step 2: Execute tasks
   │   └─> Parallel execution with validation
   ├─> Step 3: Validate contracts
@@ -276,6 +343,12 @@ Decomposition (OpenAI)
     │
     ▼
 User Review & Clarification
+    │
+    ▼
+Complexity Analysis (NEW)
+    ├─> Analyze each task
+    ├─> Split tasks >300 lines
+    └─> Update dependencies
     │
     ▼
 Task Graph Construction
@@ -416,7 +489,9 @@ Synthesize documentation from all summaries
   "Engine": {
     "MaxRetries": 3,
     "UseBatchValidation": true,
-    "UseHybridValidation": true
+    "UseHybridValidation": true,
+    "MaxLinesPerTask": 300,
+    "EnableComplexityAnalysis": true
   },
   "Documentation": {
     "Enabled": true,
@@ -462,6 +537,13 @@ Extend `DocumentationService`:
 - Additional metadata fields
 - Integration with documentation systems
 - Custom training data schemas
+
+### Complexity Analysis Customization (NEW)
+Extend `TaskComplexityAnalyzer`:
+- Custom complexity scoring algorithms
+- Domain-specific line count estimation
+- Custom decomposition thresholds
+- Additional complexity factors
 
 ## Performance Considerations
 
