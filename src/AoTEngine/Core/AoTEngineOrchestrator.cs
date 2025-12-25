@@ -70,7 +70,8 @@ public class AoTEngineOrchestrator
             if ((useHybridValidation || useBatchValidation) && !string.IsNullOrEmpty(outputDirectory))
             {
                 Console.WriteLine($"\n📁 Output directory for build validation: {outputDirectory}");
-                var buildService = new ProjectBuildService();
+                // Pass OpenAI service to ProjectBuildService for dynamic package version resolution
+                var buildService = new ProjectBuildService(_openAIService);
                 executionEngine = new ParallelExecutionEngine(
                     _openAIService, 
                     _validatorService,

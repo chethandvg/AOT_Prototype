@@ -146,15 +146,27 @@ if (result.Success)
             projectName = "GeneratedApp";
         }
         
-        var buildService = new ProjectBuildService();
-        var buildResult = await buildService.CreateAndValidateProjectAsync(outputDirectory, projectName, result.FinalCode);
+        // Use OpenAI service to get latest package versions
+        var buildService = new ProjectBuildService(openAIService);
+        
+        // Use the new method that creates separate files and adds package references dynamically
+        // This analyzes the generated code and queries OpenAI for latest stable .NET 9 compatible versions
+        var buildResult = await buildService.CreateProjectFromTasksAsync(outputDirectory, projectName, result.Tasks);
         
         if (buildResult.Success)
         {
             Console.WriteLine($"\n🎉 Project created successfully at: {buildResult.ProjectPath}");
+            if (buildResult.GeneratedFiles.Any())
+            {
+                Console.WriteLine($"   📄 Generated files:");
+                foreach (var file in buildResult.GeneratedFiles)
+                {
+                    Console.WriteLine($"      - {Path.GetFileName(file)}");
+                }
+            }
             if (!string.IsNullOrEmpty(buildResult.OutputAssemblyPath))
             {
-                Console.WriteLine($"   Assembly: {buildResult.OutputAssemblyPath}");
+                Console.WriteLine($"   🔧 Assembly: {buildResult.OutputAssemblyPath}");
             }
             
             // Ask if user wants to run the project

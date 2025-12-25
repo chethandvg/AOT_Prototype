@@ -91,12 +91,12 @@ public class ParallelExecutionEngine
             Console.WriteLine($"Generated code for {completedTasks.Count}/{tasks.Count} tasks");
         }
 
-        // Step 2: Combine all generated code
-        Console.WriteLine("\n?? Combining all generated code for batch validation...");
+        // Step 2: Combine all generated code (still needed for Roslyn validation fallback)
+        Console.WriteLine("\n📋 Preparing for batch validation...");
         var combinedCode = CombineGeneratedCode(tasks);
         
         // Step 3: Validate the combined code
-        Console.WriteLine("\n?? Validating combined code (inter-references will be resolved)...");
+        Console.WriteLine("\n🔍 Validating combined code (inter-references will be resolved)...");
         
         for (int attempt = 0; attempt < MaxRetries; attempt++)
         {
@@ -107,12 +107,17 @@ public class ParallelExecutionEngine
             {
                 Console.WriteLine($"   Building project at: {_outputDirectory}");
                 var projectName = $"GeneratedCode_{DateTime.Now:yyyyMMdd_HHmmss}";
-                var buildResult = await _buildService.CreateAndValidateProjectAsync(_outputDirectory, projectName, combinedCode);
+                // Use the new method that creates separate files and adds package references
+                var buildResult = await _buildService.CreateProjectFromTasksAsync(_outputDirectory, projectName, tasks);
                 validationResult = _buildService.ConvertToValidationResult(buildResult);
                 
                 if (buildResult.Success)
                 {
-                    Console.WriteLine($"   ?? Project created at: {buildResult.ProjectPath}");
+                    Console.WriteLine($"   📁 Project created at: {buildResult.ProjectPath}");
+                    if (buildResult.GeneratedFiles.Any())
+                    {
+                        Console.WriteLine($"   📄 Generated {buildResult.GeneratedFiles.Count} code file(s)");
+                    }
                 }
             }
             else
@@ -215,12 +220,12 @@ public class ParallelExecutionEngine
             Console.WriteLine($"Generated and validated {completedTasks.Count}/{tasks.Count} tasks");
         }
 
-        // Step 2: Combine all generated code
-        Console.WriteLine("\n?? Combining all generated code for batch validation...");
+        // Step 2: Combine all generated code (still needed for Roslyn validation fallback)
+        Console.WriteLine("\n📋 Preparing for batch validation...");
         var combinedCode = CombineGeneratedCode(tasks);
         
         // Step 3: Validate the combined code
-        Console.WriteLine("\n?? Validating combined code (resolving inter-references)...");
+        Console.WriteLine("\n🔍 Validating combined code (resolving inter-references)...");
         
         for (int attempt = 0; attempt < MaxRetries; attempt++)
         {
@@ -231,12 +236,17 @@ public class ParallelExecutionEngine
             {
                 Console.WriteLine($"   Building project at: {_outputDirectory}");
                 var projectName = $"GeneratedCode_{DateTime.Now:yyyyMMdd_HHmmss}";
-                var buildResult = await _buildService.CreateAndValidateProjectAsync(_outputDirectory, projectName, combinedCode);
+                // Use the new method that creates separate files and adds package references
+                var buildResult = await _buildService.CreateProjectFromTasksAsync(_outputDirectory, projectName, tasks);
                 validationResult = _buildService.ConvertToValidationResult(buildResult);
                 
                 if (buildResult.Success)
                 {
-                    Console.WriteLine($"   ?? Project created at: {buildResult.ProjectPath}");
+                    Console.WriteLine($"   📁 Project created at: {buildResult.ProjectPath}");
+                    if (buildResult.GeneratedFiles.Any())
+                    {
+                        Console.WriteLine($"   📄 Generated {buildResult.GeneratedFiles.Count} code file(s)");
+                    }
                 }
             }
             else
