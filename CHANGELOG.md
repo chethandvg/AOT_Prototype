@@ -2,7 +2,120 @@
 
 All notable changes and improvements to the AoT Engine project.
 
-## [Latest] - Advanced Code Integration Pipeline
+## [Latest] - Contract-First Code Generation
+
+### New Features
+
+#### Contract-First Generation System
+The code generation system has been enhanced with a Contract-First approach that generates and freezes API contracts (interfaces, enums, DTOs, abstract classes) before implementations, preventing type ambiguities and signature mismatches.
+
+- **Contract Catalog**: Central registry of frozen contracts
+  - Enums with valid member lists
+  - Interfaces with exact method signatures
+  - Models/DTOs with property definitions
+  - Abstract classes with required overrides
+  - Generates actual C# code for contracts
+  - Persists contracts to JSON manifest for reproducibility
+
+- **Enhanced Symbol Registry**: Improved collision detection
+  - Tracks types across namespaces to prevent ambiguity
+  - Namespace validation (DTOs in `.Models`, not `.Services`)
+  - Service-specific Request/Response types excluded from model checks
+  - Automatic alias generation for ambiguous types
+  - `GetSymbolsBySimpleName()` for type lookup
+  - `IsAmbiguous()` for collision detection
+
+- **Prompt Context Injection**: Contract-aware prompts
+  - Exact interface/abstract signatures injected into prompts
+  - Known symbols block prevents type redefinition
+  - Guardrails: "DO NOT redefine any types from contracts"
+  - `ValidateAgainstContracts()` catches violations early
+
+- **Per-Atom Compilation**: Fast Roslyn compile per file
+  - Classified diagnostics (SymbolCollision, MissingInterfaceMember, SignatureMismatch, etc.)
+  - Early failure detection before batch validation
+  - Auto-fix loop with compiler-driven patching
+
+- **Auto-Fix Service**: Compiler-driven patching
+  - Interface implementation fixes (`TryFixMissingInterfaceMember`)
+  - Abstract method override fixes (`TryFixMissingAbstractMember`)
+  - Sealed type detection with composition fallback (`TryFixSealedInheritance`)
+  - Ambiguous reference resolution (`TryFixAmbiguousReference`)
+
+#### New Models
+- **ContractCatalog**: Frozen contract definitions container
+  - `Enums`, `Interfaces`, `Models`, `AbstractClasses` collections
+  - `Freeze()` to lock contracts
+  - `ContainsType()`, `GetContract()` for lookups
+  - `GenerateCode()` for C# code generation
+- **EnumContract**: Enum definition with members and values
+- **InterfaceContract**: Interface with methods, properties, type constraints
+- **ModelContract**: DTO/Model with properties, base classes
+- **AbstractClassContract**: Abstract class with abstract/virtual methods
+- **MethodSignatureContract**, **PropertySignatureContract**, **ParameterContract**: Signature definitions
+- **SymbolCollision**, **SymbolCollisionType**: Collision tracking
+
+#### New Services
+- **ContractGenerationService**: Generates contract catalog from task decomposition
+- **ContractManifestService**: Saves/loads contracts in JSON format
+- **PromptContextBuilder**: Builds enhanced prompt context with contracts
+- **AtomCompilationService**: Per-atom Roslyn compilation with diagnostics
+- **AutoFixService**: Compiler-driven patching loop
+- **OpenAIService.ContractAware**: Contract-aware code generation methods
+
+#### Orchestrator Enhancements
+- New parameters: `enableContractFirst`, `projectName`
+- Step 1.25: Contract generation before task execution
+- `AoTResult.ContractCatalog`: Access frozen contracts
+
+#### Usage Example
+```csharp
+var result = await orchestrator.ExecuteAsync(
+    userRequest,
+    context: "",
+    useBatchValidation: true,
+    useHybridValidation: false,
+    outputDirectory: "./output",
+    maxLinesPerTask: 300,
+    enableComplexityAnalysis: true,
+    enableContractFirst: true,    // Enable Contract-First generation
+    projectName: "MyProject"       // Project name for namespace prefixing
+);
+
+// Access frozen contracts
+if (result.ContractCatalog != null)
+{
+    foreach (var iface in result.ContractCatalog.Interfaces)
+    {
+        Console.WriteLine($"Interface: {iface.FullyQualifiedName}");
+    }
+}
+```
+
+#### Configuration
+```json
+{
+  "Engine": {
+    "EnableContractFirst": true
+  }
+}
+```
+
+### Issues Addressed
+This feature addresses the following compilation errors in generated code:
+- `'OilCompanyInfo' is an ambiguous reference` → Symbol Registry with collision detection
+- `'OpenAiHttpClient' does not implement interface member` → Contract-first with exact signatures
+- `'HtmlReportExporter' does not implement inherited abstract member` → Abstract class contracts
+- `'DataQualityIssueType' does not contain a definition for...` → Enum governance
+- `'OpenAiResponse<T>': cannot derive from sealed type` → Sealed type detection
+
+### Tests Added
+- 37 new tests covering ContractCatalog, SymbolTable, PromptContextBuilder, AtomCompilationService
+- All 120 tests passing
+
+---
+
+## [Previous] - Advanced Code Integration Pipeline
 
 ### New Features
 
@@ -605,6 +718,9 @@ rm -rf bin/ obj/
 ## Future Roadmap
 
 - [x] Task complexity analysis and automatic decomposition
+- [x] Contract-First code generation
+- [x] Per-atom compilation with classified diagnostics
+- [x] Auto-fix loop for common integration errors
 - [ ] Multi-language support (Python, JavaScript, Java)
 - [ ] Actual test execution with test frameworks
 - [ ] CI/CD pipeline integration
@@ -630,12 +746,15 @@ None in current version.
 ## Technical Debt & Improvements
 
 ### Completed
-- ? Fixed batch validation deadlocks
-- ? Improved assembly reference resolution
-- ? Enhanced error filtering and retry logic
-- ? Optimized build output directory handling
-- ? Task complexity analysis and automatic decomposition
-- ? Maximum 300 lines per task enforcement
+- ✅ Fixed batch validation deadlocks
+- ✅ Improved assembly reference resolution
+- ✅ Enhanced error filtering and retry logic
+- ✅ Optimized build output directory handling
+- ✅ Task complexity analysis and automatic decomposition
+- ✅ Maximum 300 lines per task enforcement
+- ✅ Contract-First code generation for type safety
+- ✅ Per-atom compilation with classified diagnostics
+- ✅ Auto-fix loop for common integration errors
 
 ### In Progress
 - ?? Caching layer for OpenAI responses
