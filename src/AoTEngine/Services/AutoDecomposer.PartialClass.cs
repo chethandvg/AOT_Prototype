@@ -10,52 +10,6 @@ namespace AoTEngine.Services;
 public partial class AutoDecomposer
 {
     /// <summary>
-    /// Gets the user prompt for decomposition.
-    /// </summary>
-    private string GetDecompositionUserPrompt(
-        TaskNode task,
-        ComplexityMetrics metrics,
-        DecompositionType type,
-        int maxLineThreshold)
-    {
-        var subtaskCount = metrics.RecommendedSubtaskCount;
-        var linesPerSubtask = maxLineThreshold - 10; // Leave margin
-
-        return $@"Decompose this task into {subtaskCount} subtasks, each generating max {linesPerSubtask} lines:
-
-ORIGINAL TASK:
-- ID: {task.Id}
-- Description: {task.Description}
-- Context: {task.Context}
-- Namespace: {task.Namespace}
-- Expected Types: {string.Join(", ", task.ExpectedTypes ?? new List<string>())}
-- Dependencies: {string.Join(", ", task.Dependencies ?? new List<string>())}
-
-COMPLEXITY ANALYSIS:
-- Estimated Lines: {metrics.EstimatedLineCount}
-- Expected Types: {metrics.ExpectedTypeCount}
-- Estimated Methods: {metrics.EstimatedMethodCount}
-- Complexity Score: {metrics.ComplexityScore}/100
-
-Return ONLY valid JSON:
-{{
-  ""subtasks"": [
-    {{
-      ""id"": ""{task.Id}_part1"",
-      ""description"": ""First part description"",
-      ""dependencies"": [],
-      ""context"": ""Context for this part"",
-      ""namespace"": ""{task.Namespace}"",
-      ""expectedTypes"": [""TypeName""],
-      ""requiredPackages"": []
-    }}
-  ],
-  ""shared_fields"": [""field definitions needed across parts""],
-  ""shared_interfaces"": [""interface names if any""]
-}}";
-    }
-
-    /// <summary>
     /// Processes and validates subtasks from OpenAI.
     /// </summary>
     private List<TaskNode> ProcessAndValidateSubtasks(
