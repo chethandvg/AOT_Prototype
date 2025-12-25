@@ -1,4 +1,5 @@
 using AoTEngine.Models;
+using System.Linq;
 using Newtonsoft.Json;
 using OpenAI.Chat;
 
