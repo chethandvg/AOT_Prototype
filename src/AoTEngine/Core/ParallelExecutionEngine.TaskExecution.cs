@@ -52,7 +52,13 @@ public partial class ParallelExecutionEngine
             }
 
             Console.WriteLine($"Completed {completedTasks.Count}/{tasks.Count} tasks");
+            
+            // Save checkpoint after each batch of tasks
+            await SaveCheckpointAsync(tasks, completedTasks);
         }
+
+        // Save final checkpoint
+        await SaveCheckpointAsync(tasks, completedTasks, "completed");
 
         return tasks;
     }
