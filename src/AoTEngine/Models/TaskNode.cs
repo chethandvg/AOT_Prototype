@@ -74,4 +74,24 @@ public class TaskNode
     /// Types consumed from dependent tasks. Key: task ID, Value: list of type names.
     /// </summary>
     public Dictionary<string, List<string>> ConsumedTypes { get; set; } = new();
+
+    /// <summary>
+    /// Summary explanation of the task's generated code, generated after validation.
+    /// </summary>
+    public string Summary { get; set; } = string.Empty;
+
+    /// <summary>
+    /// The model used to generate the summary (e.g., "gpt-4o-mini").
+    /// </summary>
+    public string SummaryModel { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Number of validation attempts made before the task passed.
+    /// </summary>
+    public int ValidationAttemptCount { get; set; }
+
+    /// <summary>
+    /// UTC timestamp when the summary was generated.
+    /// </summary>
+    public DateTime? SummaryGeneratedAtUtc { get; set; }
 }

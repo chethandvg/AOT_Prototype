@@ -2,11 +2,12 @@
 
 ## System Overview
 
-The AoT (Atom of Thought) Engine is designed around four core principles:
+The AoT (Atom of Thought) Engine is designed around five core principles:
 1. **Decomposition**: Break complex tasks into atomic units
 2. **Parallelism**: Execute independent tasks concurrently
 3. **Validation**: Ensure code quality through compilation and linting
 4. **Interaction**: Engage users when uncertainties arise
+5. **Documentation**: Generate structured documentation and training data
 
 ## Architecture Diagram
 
@@ -30,8 +31,8 @@ The AoT (Atom of Thought) Engine is designed around four core principles:
 │ • Decompose │  │ • DAG Analysis   │  │ • Merge Code   │
 │ • Generate  │  │ • Task.WhenAll   │  │ • Validate     │
 │ • Re-prompt │  │ • Dependency     │  │   Contracts    │
-│             │  │   Resolution     │  │ • Generate     │
-│             │  │                  │  │   Report       │
+│ • Summary   │  │   Resolution     │  │ • Generate     │
+│   Generation│  │ • Summary Gen    │  │   Report       │
 └─────────────┘  └──────┬───────────┘  └────────────────┘
                         │
                         ▼
@@ -56,6 +57,18 @@ The AoT (Atom of Thought) Engine is designed around four core principles:
               │ • Collect Input     │
               │ • Review Tasks      │
               └─────────────────────┘
+                        │
+                        ▼
+              ┌─────────────────────┐
+              │  Documentation      │
+              │  Service (NEW)      │
+              │                     │
+              │ • Task Summaries    │
+              │ • Project Docs      │
+              │ • Export Markdown   │
+              │ • Export JSON       │
+              │ • Export JSONL      │
+              └─────────────────────┘
 ```
 
 ## Component Details
@@ -65,7 +78,20 @@ The AoT (Atom of Thought) Engine is designed around four core principles:
 **TaskNode**
 - Represents an atomic task in the DAG
 - Properties: Id, Description, Dependencies, GeneratedCode, ValidationStatus
+- **NEW**: Summary, SummaryModel, ValidationAttemptCount, SummaryGeneratedAtUtc
 - Tracks: Completion status, retry count, validation errors
+
+**TaskSummaryRecord** (NEW)
+- Structured summary for each task
+- Properties: TaskId, TaskDescription, Purpose, KeyBehaviors, EdgeCases
+- ValidationNotes, GeneratedCodeHash, SummaryModel, CreatedUtc
+- Used for documentation and training data export
+
+**ProjectDocumentation** (NEW)
+- Project-level documentation container
+- Properties: ProjectRequest, Description, TaskRecords, ModuleIndex
+- HighLevelArchitectureSummary, DependencyGraphSummary
+- Generated after all tasks complete
 
 **TaskDecompositionRequest/Response**
 - Request: Original user request + context
@@ -94,6 +120,16 @@ RegenerateCodeWithErrorsAsync()
   ├─> Includes validation errors in prompt
   ├─> Requests corrected code
   └─> Returns improved snippet
+
+GenerateTaskSummaryAsync() // NEW
+  ├─> Analyzes generated code
+  ├─> Generates structured JSON summary
+  └─> Returns TaskSummaryInfo
+
+GenerateArchitectureSummaryAsync() // NEW
+  ├─> Analyzes all task summaries
+  ├─> Generates high-level overview
+  └─> Returns markdown summary
 ```
 
 **CodeValidatorService**
@@ -127,6 +163,38 @@ CreateExecutionReport()
   └─> Generates summary statistics
 ```
 
+**DocumentationService** (NEW)
+```csharp
+GenerateTaskSummaryAsync()
+  ├─> Validates input (task, dependencies)
+  ├─> Calls OpenAI for summary
+  ├─> Creates TaskSummaryRecord
+  └─> Updates task with summary
+
+SynthesizeProjectDocumentationAsync()
+  ├─> Validates tasks list
+  ├─> Creates task records
+  ├─> Builds module index
+  ├─> Builds dependency graph
+  ├─> Generates architecture summary
+  └─> Returns ProjectDocumentation
+
+ExportMarkdownAsync()
+  ├─> Generates formatted markdown
+  ├─> Writes to file with error handling
+  └─> Logs success/failure
+
+ExportJsonAsync()
+  ├─> Serializes ProjectDocumentation
+  ├─> Writes to file with error handling
+  └─> Logs success/failure
+
+ExportJsonlDatasetAsync()
+  ├─> Streams records to file
+  ├─> One JSON line per task
+  └─> Includes instruction/input/output/metadata
+```
+
 **UserInteractionService**
 ```csharp
 HandleTaskUncertaintyAsync()
@@ -153,6 +221,7 @@ ExecuteTasksAsync()
   ├─> While incomplete tasks exist:
   │   ├─> Find ready tasks (dependencies met)
   │   ├─> Execute in parallel (Task.WhenAll)
+  │   ├─> Generate summaries after validation (NEW)
   │   └─> Mark completed
   └─> Returns all tasks
 
@@ -160,10 +229,17 @@ ExecuteTaskWithValidationAsync()
   ├─> Handle task uncertainty
   ├─> Generate code via OpenAI
   ├─> Validate code
+  ├─> Track ValidationAttemptCount (NEW)
   ├─> If invalid:
   │   ├─> Re-prompt with errors
   │   └─> Retry (up to MaxRetries)
+  ├─> Generate task summary (NEW)
   └─> Return validated task
+
+GenerateSummariesForAllTasksAsync() // NEW
+  ├─> Iterate through all tasks
+  ├─> Generate summary for each
+  └─> Handle failures gracefully
 
 TopologicalSort()
   └─> Orders tasks respecting dependencies
@@ -179,7 +255,13 @@ ExecuteAsync()
   │   └─> Parallel execution with validation
   ├─> Step 3: Validate contracts
   ├─> Step 4: Merge code
-  └─> Step 5: Generate report
+  ├─> Step 5: Generate report
+  ├─> Step 6: Synthesize documentation (NEW)
+  │   ├─> Generate project documentation
+  │   ├─> Export markdown
+  │   ├─> Export JSON
+  │   └─> Export JSONL
+  └─> Return AoTResult with documentation
 ```
 
 ## Data Flow
@@ -204,6 +286,8 @@ Parallel Execution Loop:
     ├─> Handle Uncertainties
     ├─> Generate Code (OpenAI)
     ├─> Validate Code (Roslyn)
+    ├─> Track Validation Attempts (NEW)
+    ├─> Generate Task Summary (NEW)
     ├─> Retry if Failed
     └─> Mark Completed
     │
@@ -220,7 +304,50 @@ Final Validation
 Report Generation
     │
     ▼
-Output (Final Code + Report)
+Documentation Synthesis (NEW)
+    ├─> Project Documentation
+    ├─> Architecture Summary
+    └─> Training Dataset
+    │
+    ▼
+Output (Final Code + Report + Documentation)
+```
+
+### Documentation Generation Flow (NEW)
+
+```
+Validated Task
+    │
+    ├─> Immediately after validation passes
+    │
+    ▼
+Generate Task Summary
+    ├─> Call OpenAI with task code
+    ├─> Parse structured JSON response
+    │   {
+    │     "purpose": "...",
+    │     "key_behaviors": [...],
+    │     "edge_cases": [...]
+    │   }
+    ├─> Create TaskSummaryRecord
+    └─> Update TaskNode.Summary
+    │
+    ▼
+(After all tasks complete)
+    │
+    ▼
+Synthesize Project Documentation
+    ├─> Collect all TaskSummaryRecords
+    ├─> Build ModuleIndex (type → task)
+    ├─> Build DependencyGraphSummary
+    ├─> Generate ArchitectureSummary
+    └─> Create ProjectDocumentation
+    │
+    ▼
+Export Documentation
+    ├─> Markdown (Documentation.md)
+    ├─> JSON (Documentation.json)
+    └─> JSONL (training_data.jsonl)
 ```
 
 ### Parallel Execution Example
@@ -230,6 +357,9 @@ Initial State:
 task1 (ready) ──┐
 task2 (ready) ──┼─> Execute in parallel via Task.WhenAll
 task3 (ready) ──┘
+                │
+                ├─> Validate each
+                └─> Generate summaries (NEW)
 
 After Round 1:
 task4 (depends on task1,task2) ──┐
@@ -240,15 +370,20 @@ After Round 2:
 task7 (depends on task4,task5,task6) ─> Execute
 
 Complete!
+    │
+    ▼
+Synthesize documentation from all summaries
 ```
 
 ## Error Handling Strategy
 
 ### Validation Failures
 1. Capture compilation errors from Roslyn
-2. Re-prompt OpenAI with error details
-3. Retry up to MaxRetries (default: 3)
-4. Fail if still invalid after retries
+2. Track ValidationAttemptCount (NEW)
+3. Re-prompt OpenAI with error details
+4. Retry up to MaxRetries (default: 3)
+5. Include attempt count in documentation (NEW)
+6. Fail if still invalid after retries
 
 ### OpenAI API Errors
 1. Catch HttpRequestException separately
@@ -262,6 +397,13 @@ Complete!
 3. Report deadlock with task details
 4. Throw InvalidOperationException
 
+### Documentation Failures (NEW)
+1. Catch exceptions during summary generation
+2. Fall back to minimal summary
+3. Log warning but don't fail task
+4. Continue with code generation
+5. Handle file I/O errors gracefully
+
 ## Configuration
 
 ### appsettings.json
@@ -272,7 +414,19 @@ Complete!
     "Model": "gpt-4 | gpt-3.5-turbo"
   },
   "Engine": {
-    "MaxRetries": 3
+    "MaxRetries": 3,
+    "UseBatchValidation": true,
+    "UseHybridValidation": true
+  },
+  "Documentation": {
+    "Enabled": true,
+    "GeneratePerTask": true,
+    "GenerateProjectSummary": true,
+    "ExportMarkdown": true,
+    "ExportJson": true,
+    "ExportJsonl": true,
+    "SummaryModel": "gpt-4o-mini",
+    "MaxSummaryTokens": 300
   }
 }
 ```
@@ -294,12 +448,20 @@ Override methods in `OpenAIService`:
 - Custom decomposition strategies
 - Domain-specific code generation
 - Multi-language support
+- Custom summary formats (NEW)
 
 ### Additional User Interactions
 Extend `UserInteractionService`:
 - Custom uncertainty detection
 - Integration with issue tracking
 - Collaborative review workflows
+
+### Documentation Customization (NEW)
+Extend `DocumentationService`:
+- Custom export formats
+- Additional metadata fields
+- Integration with documentation systems
+- Custom training data schemas
 
 ## Performance Considerations
 
@@ -308,11 +470,17 @@ Extend `UserInteractionService`:
 - Reduces total execution time
 - Scales with task graph width
 
+### Documentation Generation (NEW)
+- Summaries generated after validation (not blocking)
+- Failures don't affect code generation
+- Streaming export for large datasets
+
 ### Optimization Strategies
 1. **Caching**: Cache OpenAI responses for identical prompts
 2. **Batching**: Group similar tasks for efficient processing
 3. **Lazy Loading**: Load references only when needed
 4. **Connection Pooling**: Reuse HTTP connections to OpenAI
+5. **Streaming**: Stream JSONL export to reduce memory usage (NEW)
 
 ## Security Considerations
 
@@ -321,20 +489,25 @@ Extend `UserInteractionService`:
 3. **Dependency Validation**: Ensure all assembly references are trusted
 4. **User Input**: Sanitize user clarifications before including in prompts
 5. **Output Sanitization**: Review generated code for security vulnerabilities
+6. **Path Validation**: Validate output paths to prevent directory traversal (NEW)
+7. **Training Data**: Review JSONL exports for sensitive content (NEW)
 
 ## Testing Strategy
 
 ### Unit Tests
-- Model validation (TaskNode, ValidationResult)
-- Service isolation (CodeValidator, CodeMerger)
+- Model validation (TaskNode, ValidationResult, TaskSummaryRecord)
+- Service isolation (CodeValidator, CodeMerger, DocumentationService)
 - Engine logic (TopologicalSort, dependency resolution)
+- Documentation export formats (NEW)
 
 ### Integration Tests
 - OpenAI API integration
 - End-to-end workflow
 - Error handling scenarios
+- Documentation generation flow (NEW)
 
 ### Manual Testing
 - User interaction flows
 - Complex task decompositions
 - Validation retry logic
+- Documentation output quality (NEW)

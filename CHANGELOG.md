@@ -2,6 +2,78 @@
 
 All notable changes and improvements to the AoT Engine project.
 
+## [Latest] - Documentation Layer
+
+### New Features
+
+#### Documentation Generation System (NEW)
+- **Per-Task Summaries**: Automatic generation of structured summaries after code validation
+- **Project Documentation**: Synthesized high-level architecture documentation
+- **Multiple Export Formats**:
+  - `Documentation.md` - Human-readable markdown documentation
+  - `Documentation.json` - Structured JSON for tooling integration
+  - `training_data.jsonl` - Fine-tuning dataset for ML models
+
+#### New Models
+- **TaskSummaryRecord**: Structured summary for each task
+  - Purpose, key behaviors, edge cases
+  - Validation notes with attempt tracking
+  - Generated code hash for tracking
+- **ProjectDocumentation**: Project-level documentation container
+  - Architecture summary
+  - Module index (type → task mapping)
+  - Dependency graph summary
+
+#### TaskNode Enhancements
+- `Summary`: Generated explanation of the task's code
+- `SummaryModel`: Model used for summary generation
+- `ValidationAttemptCount`: Number of validation attempts
+- `SummaryGeneratedAtUtc`: Timestamp for audit purposes
+
+#### AoTResult Enhancements
+- `FinalDocumentation`: Aggregated markdown documentation
+- `ProjectDocumentation`: Complete structured documentation
+- `DocumentationPaths`: File paths for exported documentation
+
+#### New Services
+- **DocumentationService**: Handles all documentation operations
+  - `GenerateTaskSummaryAsync()`: Per-task summary generation
+  - `SynthesizeProjectDocumentationAsync()`: Project documentation synthesis
+  - `ExportMarkdownAsync()`: Markdown export with error handling
+  - `ExportJsonAsync()`: JSON export with error handling
+  - `ExportJsonlDatasetAsync()`: Streaming JSONL export
+
+#### OpenAI Service Enhancements
+- `GenerateTaskSummaryAsync()`: Structured JSON summary generation
+- `GenerateArchitectureSummaryAsync()`: High-level architecture summary
+- Improved JSON parsing with specific error handling
+- Null safety checks for API responses
+
+#### Configuration
+```json
+{
+  "Documentation": {
+    "Enabled": true,
+    "GeneratePerTask": true,
+    "GenerateProjectSummary": true,
+    "ExportMarkdown": true,
+    "ExportJson": true,
+    "ExportJsonl": true,
+    "SummaryModel": "gpt-4o-mini",
+    "MaxSummaryTokens": 300
+  }
+}
+```
+
+### Improvements
+- Input validation for all documentation methods
+- File I/O error handling with descriptive messages
+- Streaming JSONL export for memory efficiency
+- Defensive coding for hash truncation
+- Documentation failures don't affect code generation
+
+---
+
 ## Features Overview
 
 ### Assembly & Package Management

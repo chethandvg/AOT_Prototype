@@ -13,6 +13,7 @@ public class ParallelExecutionEngine
     private readonly CodeValidatorService _validatorService;
     private readonly UserInteractionService _userInteractionService;
     private readonly ProjectBuildService? _buildService;
+    private readonly DocumentationService? _documentationService;
     private readonly string? _outputDirectory;
     private const int MaxRetries = 3;
 
@@ -21,13 +22,15 @@ public class ParallelExecutionEngine
         CodeValidatorService validatorService,
         UserInteractionService userInteractionService,
         ProjectBuildService? buildService = null,
-        string? outputDirectory = null)
+        string? outputDirectory = null,
+        DocumentationService? documentationService = null)
     {
         _openAIService = openAIService;
         _validatorService = validatorService;
         _userInteractionService = userInteractionService;
         _buildService = buildService;
         _outputDirectory = outputDirectory;
+        _documentationService = documentationService;
     }
 
     /// <summary>
@@ -128,13 +131,18 @@ public class ParallelExecutionEngine
             
             if (validationResult.IsValid)
             {
-                // Mark all tasks as validated
+                // Mark all tasks as validated and track attempt count
                 foreach (var task in tasks)
                 {
                     task.IsValidated = true;
                     task.ValidationErrors.Clear();
+                    task.ValidationAttemptCount = attempt + 1;
                 }
                 Console.WriteLine("? Combined code validated successfully! All inter-references resolved.");
+                
+                // Generate summaries for all tasks after batch validation
+                await GenerateSummariesForAllTasksAsync(tasks, completedTasks);
+                
                 break;
             }
             else
@@ -257,12 +265,17 @@ public class ParallelExecutionEngine
             
             if (validationResult.IsValid)
             {
-                // Mark all tasks as batch validated
+                // Mark all tasks as batch validated and track attempt count
                 foreach (var task in tasks)
                 {
                     task.ValidationErrors.Clear();
+                    task.ValidationAttemptCount = attempt + 1;
                 }
                 Console.WriteLine("? Combined code validated successfully! All inter-references resolved.");
+                
+                // Generate summaries for all tasks after batch validation
+                await GenerateSummariesForAllTasksAsync(tasks, completedTasks);
+                
                 break;
             }
             else
@@ -414,7 +427,12 @@ public class ParallelExecutionEngine
                 {
                     task.IsValidated = true;
                     task.ValidationErrors.Clear();
+                    task.ValidationAttemptCount = attempt + 1;
                     Console.WriteLine($"Task {task.Id} validated successfully");
+                    
+                    // Generate summary after successful validation
+                    await GenerateTaskSummaryAsync(task, completedTasks);
+                    
                     break;
                 }
                 else
@@ -463,6 +481,48 @@ public class ParallelExecutionEngine
         }
 
         return task;
+    }
+    
+    /// <summary>
+    /// Generates a summary for a task using the documentation service.
+    /// </summary>
+    private async Task GenerateTaskSummaryAsync(TaskNode task, Dictionary<string, TaskNode> completedTasks)
+    {
+        if (_documentationService == null)
+        {
+            return;
+        }
+        
+        try
+        {
+            Console.WriteLine($"   📝 Generating summary for task {task.Id}...");
+            await _documentationService.GenerateTaskSummaryAsync(task, completedTasks);
+        }
+        catch (Exception ex)
+        {
+            // Summary generation should not fail the task
+            Console.WriteLine($"   ⚠️  Failed to generate summary for task {task.Id}: {ex.Message}");
+        }
+    }
+    
+    /// <summary>
+    /// Generates summaries for all tasks after batch validation.
+    /// </summary>
+    private async Task GenerateSummariesForAllTasksAsync(List<TaskNode> tasks, Dictionary<string, TaskNode> completedTasks)
+    {
+        if (_documentationService == null)
+        {
+            return;
+        }
+        
+        Console.WriteLine("\n📝 Generating summaries for all tasks...");
+        
+        foreach (var task in tasks)
+        {
+            await GenerateTaskSummaryAsync(task, completedTasks);
+        }
+        
+        Console.WriteLine("✅ Summary generation complete.");
     }
 
     /// <summary>

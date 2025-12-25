@@ -3,7 +3,7 @@
 
 ## Overview
 
-The AoT Engine is a sophisticated C# application that leverages OpenAI's GPT models to decompose complex programming tasks into atomic subtasks, execute them in parallel, validate the generated code, and merge the results into a complete solution.
+The AoT Engine is a sophisticated C# application that leverages OpenAI's GPT models to decompose complex programming tasks into atomic subtasks, execute them in parallel, validate the generated code, and merge the results into a complete solution. It also generates comprehensive documentation and training datasets.
 
 ## 📚 Documentation
 
@@ -29,7 +29,7 @@ The AoT Engine is a sophisticated C# application that leverages OpenAI's GPT mod
 - Runs linting checks for code quality
 - Automatically retries with error feedback on validation failures
 
-### 4. **Interactive Uncertainty Handling** ⚠️ NEW
+### 4. **Interactive Uncertainty Handling**
 - Detects uncertainties in task descriptions
 - Prompts user for clarification when needed
 - Allows review and confirmation of task decomposition
@@ -40,12 +40,23 @@ The AoT Engine is a sophisticated C# application that leverages OpenAI's GPT mod
 - Merges all snippets into a cohesive solution
 - Generates execution reports
 
+### 6. **Documentation Generation** ⚠️ NEW
+- Generates per-task summaries after code validation
+- Synthesizes project-level architecture documentation
+- Exports documentation in multiple formats:
+  - **Markdown** (`Documentation.md`) - Human-readable documentation
+  - **JSON** (`Documentation.json`) - Structured data for tooling
+  - **JSONL** (`training_data.jsonl`) - Fine-tuning dataset for ML models
+- Uses dependency summaries as context for better task coherence
+
 ## Architecture
 
 ```
 AoTEngine/
 ├── Models/                     # Data models
 │   ├── TaskNode.cs            # Represents atomic task in DAG
+│   ├── TaskSummaryRecord.cs   # Structured task documentation (NEW)
+│   ├── ProjectDocumentation.cs # Project-level documentation (NEW)
 │   ├── TaskDecompositionRequest.cs
 │   ├── TaskDecompositionResponse.cs
 │   └── ValidationResult.cs
@@ -53,6 +64,7 @@ AoTEngine/
 │   ├── OpenAIService.cs       # OpenAI API integration
 │   ├── CodeValidatorService.cs # Code compilation & validation
 │   ├── CodeMergerService.cs   # Code merging & contract validation
+│   ├── DocumentationService.cs # Documentation generation (NEW)
 │   └── UserInteractionService.cs # Handles user input for uncertainties
 ├── Core/                       # Engine components
 │   ├── ParallelExecutionEngine.cs # Parallel task execution
@@ -145,8 +157,11 @@ Your response: JWT-based authentication with role-based authorization
 4. **View results:**
 The engine will execute tasks in parallel, validate code, and output:
 - Execution report
-- Final merged code
-- Saved to `generated_code.cs`
+- Final merged code (`generated_code.cs`)
+- Documentation files (when output directory specified):
+  - `Documentation.md`
+  - `Documentation.json`
+  - `training_data.jsonl`
 
 ## Building the Project
 
@@ -168,13 +183,38 @@ dotnet test
 {
   "OpenAI": {
     "ApiKey": "YOUR_API_KEY",
-    "Model": "gpt-4"          // or "gpt-3.5-turbo"
+    "Model": "gpt-4"
   },
   "Engine": {
-    "MaxRetries": 3           // Max retry attempts for validation failures
+    "MaxRetries": 3,
+    "UseBatchValidation": true,
+    "UseHybridValidation": true
+  },
+  "Documentation": {
+    "Enabled": true,
+    "GeneratePerTask": true,
+    "GenerateProjectSummary": true,
+    "ExportMarkdown": true,
+    "ExportJson": true,
+    "ExportJsonl": true,
+    "SummaryModel": "gpt-4o-mini",
+    "MaxSummaryTokens": 300
   }
 }
 ```
+
+### Documentation Configuration
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| `Enabled` | `true` | Enable/disable documentation generation |
+| `GeneratePerTask` | `true` | Generate summaries for each task |
+| `GenerateProjectSummary` | `true` | Generate project-level architecture summary |
+| `ExportMarkdown` | `true` | Export `Documentation.md` |
+| `ExportJson` | `true` | Export `Documentation.json` |
+| `ExportJsonl` | `true` | Export `training_data.jsonl` for fine-tuning |
+| `SummaryModel` | `gpt-4o-mini` | Model used for generating summaries |
+| `MaxSummaryTokens` | `300` | Maximum tokens for summary generation |
 
 ## How It Works
 
@@ -201,11 +241,57 @@ dotnet test
    - If validation fails, re-prompt with errors
    - Retry up to MaxRetries times
 
-5. **Integration Phase**
+5. **Documentation Phase** ⚠️ NEW
+   - Per-task summaries generated after validation
+   - Summaries include purpose, key behaviors, edge cases
+   - Validation notes track retry attempts
+   - Dependency summaries used as context for coherence
+
+6. **Integration Phase**
    - Contracts between tasks are validated
    - Code snippets are merged
    - Final solution is compiled
    - Execution report is generated
+
+7. **Documentation Export Phase** ⚠️ NEW
+   - Project-level documentation synthesized
+   - Architecture summary generated
+   - Documentation exported to multiple formats
+   - Training dataset created for fine-tuning
+
+## Output Files
+
+When an output directory is specified, the engine generates:
+
+| File | Description |
+|------|-------------|
+| `generated_code.cs` | Final merged C# code |
+| `ExecutionReport.txt` | Execution statistics and task details |
+| `Documentation.md` | Human-readable project documentation |
+| `Documentation.json` | Structured JSON documentation |
+| `training_data.jsonl` | Fine-tuning dataset (one line per task) |
+
+### Training Dataset Format (JSONL)
+
+Each line in `training_data.jsonl` contains:
+```json
+{
+  "instruction": "Generate C# code for: Create authentication service",
+  "input": {
+    "task_description": "Create authentication service",
+    "dependencies": [],
+    "expected_types": ["AuthService", "IAuthService"],
+    "namespace": "MyProject.Services"
+  },
+  "output": "// Generated C# code...",
+  "metadata": {
+    "task_id": "task1",
+    "purpose": "Implements JWT authentication",
+    "key_behaviors": ["Token generation", "Token validation"],
+    "validation_notes": "Passed on first attempt"
+  }
+}
+```
 
 ## Key Technologies
 
@@ -256,6 +342,11 @@ Task Details:
 
 Merged Code Length: 3521 characters
 Merged Code Lines: 142
+
+✅ Documentation synthesis complete.
+   📄 Exported Markdown documentation to: ./output/Documentation.md
+   📄 Exported JSON documentation to: ./output/Documentation.json
+   📄 Exported JSONL training dataset to: ./output/training_data.jsonl
 ```
 
 ## Limitations
@@ -267,6 +358,8 @@ Merged Code Lines: 142
 
 ## Future Enhancements
 
+- [x] Documentation generation layer
+- [x] Fine-tuning dataset export
 - [ ] Actual unit test execution
 - [ ] Support for multiple programming languages
 - [ ] Integration with CI/CD pipelines
