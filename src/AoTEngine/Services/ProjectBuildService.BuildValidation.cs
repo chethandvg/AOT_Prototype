@@ -112,7 +112,7 @@ public partial class ProjectBuildService
             using (var createProcess = new Process { StartInfo = createProcessInfo })
             {
                 createProcess.Start();
-                var output = await createProcess.StandardOutput.ReadToEndAsync();
+                _ = await createProcess.StandardOutput.ReadToEndAsync();
                 var error = await createProcess.StandardError.ReadToEndAsync();
                 await createProcess.WaitForExitAsync();
                 

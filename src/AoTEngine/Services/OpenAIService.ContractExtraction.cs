@@ -62,16 +62,14 @@ public partial class OpenAIService
                     contractBuilder.AppendLine("{");
                     
                     // Extract public members (properties, methods, events)
-                    var publicMembers = typeDecl.Members
-                        .Where(m => m.Modifiers.Any(mod => mod.Text == "public"));
+                    var memberSignatures = typeDecl.Members
+                        .Where(m => m.Modifiers.Any(mod => mod.Text == "public"))
+                        .Select(member => ExtractMemberSignature(member))
+                        .Where(sig => !string.IsNullOrEmpty(sig));
                     
-                    foreach (var member in publicMembers)
+                    foreach (var memberSignature in memberSignatures)
                     {
-                        var memberSignature = ExtractMemberSignature(member);
-                        if (!string.IsNullOrEmpty(memberSignature))
-                        {
-                            contractBuilder.AppendLine($"    {memberSignature}");
-                        }
+                        contractBuilder.AppendLine($"    {memberSignature}");
                     }
                     
                     contractBuilder.AppendLine("}");

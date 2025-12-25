@@ -53,28 +53,28 @@ public partial class ParallelExecutionEngine
             }
             
             // Match identifiers to tasks
+        foreach (var task in tasks.Where(t => !string.IsNullOrWhiteSpace(t.GeneratedCode)))
+        {
             foreach (var identifier in identifiers.Where(i => !string.IsNullOrWhiteSpace(i)))
             {
-                foreach (var task in tasks)
+                // Check if this task defines or uses the problematic identifier
+                if (System.Text.RegularExpressions.Regex.IsMatch(
+                    task.GeneratedCode,
+                    $@"\b(?:class|interface|enum|struct|record|public|private|internal|protected)\s+{identifier}\b"))
                 {
-                    if (string.IsNullOrWhiteSpace(task.GeneratedCode))
-                        continue;
-                    
-                    // Check if this task defines or uses the problematic identifier
-                    if (System.Text.RegularExpressions.Regex.IsMatch(
-                        task.GeneratedCode,
-                        $@"\b(?:class|interface|enum|struct|record|public|private|internal|protected)\s+{identifier}\b"))
+                    if (!errorPatterns.TryGetValue(task, out var taskErrors))
                     {
-                        if (!errorPatterns.ContainsKey(task))
-                            errorPatterns[task] = new List<string>();
-                        
-                        if (!errorPatterns[task].Contains(error))
-                            errorPatterns[task].Add(error);
-                        
-                        problematicTasks.Add(task);
+                        taskErrors = new List<string>();
+                        errorPatterns[task] = taskErrors;
                     }
+                    
+                    if (!taskErrors.Contains(error))
+                        taskErrors.Add(error);
+                    
+                    problematicTasks.Add(task);
                 }
             }
+        }
         }
         
         // Strategy 2: Incremental validation - add tasks one by one to find culprits
@@ -87,28 +87,31 @@ public partial class ParallelExecutionEngine
         // Strategy 3: Check for tasks with previous validation errors
         if (problematicTasks.Count == 0)
         {
-            foreach (var task in tasks)
-            {
-                if (task.ValidationErrors != null && task.ValidationErrors.Any(e => 
+            var tasksWithErrors = tasks.Where(t => 
+                t.ValidationErrors != null && t.ValidationErrors.Any(e => 
                     !e.Contains("could not be found") && 
                     !e.Contains("does not exist") &&
-                    !e.Contains("namespace")))
+                    !e.Contains("namespace")));
+            
+            foreach (var task in tasksWithErrors)
+            {
+                problematicTasks.Add(task);
+                if (!errorPatterns.TryGetValue(task, out var taskErrors))
                 {
-                    problematicTasks.Add(task);
-                    if (!errorPatterns.ContainsKey(task))
-                        errorPatterns[task] = new List<string>();
-                    errorPatterns[task].AddRange(task.ValidationErrors);
+                    taskErrors = new List<string>();
+                    errorPatterns[task] = taskErrors;
                 }
+                taskErrors.AddRange(task.ValidationErrors);
             }
         }
         
         // Store task-specific errors for targeted regeneration
         foreach (var task in problematicTasks)
         {
-            if (errorPatterns.ContainsKey(task))
+            if (errorPatterns.TryGetValue(task, out var taskErrors))
             {
-                task.ValidationErrors = errorPatterns[task];
-                Console.WriteLine($"   🔍 Identified task {task.Id} with {errorPatterns[task].Count} related error(s)");
+                task.ValidationErrors = taskErrors;
+                Console.WriteLine($"   🔍 Identified task {task.Id} with {taskErrors.Count} related error(s)");
             }
             else
             {
@@ -130,11 +133,8 @@ public partial class ParallelExecutionEngine
         // Sort tasks by dependency order
         var sortedTasks = TopologicalSort(tasks);
         
-        foreach (var task in sortedTasks)
+        foreach (var task in sortedTasks.Where(t => !string.IsNullOrWhiteSpace(t.GeneratedCode)))
         {
-            if (string.IsNullOrWhiteSpace(task.GeneratedCode))
-                continue;
-            
             // Create a test combination with all validated tasks + current task
             var testTasks = new List<TaskNode>(validatedTasks) { task };
             var combinedCode = CombineGeneratedCode(testTasks);

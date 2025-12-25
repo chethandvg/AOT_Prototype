@@ -23,18 +23,9 @@ public partial class ParallelExecutionEngine
                 Console.WriteLine($"   🔄 Regenerating task {task.Id}...");
                 
                 // Create task-specific validation result with only relevant errors
-                var taskSpecificErrors = new List<string>();
-                
-                if (task.ValidationErrors != null && task.ValidationErrors.Any())
-                {
-                    // Use the task-specific errors identified earlier
-                    taskSpecificErrors = task.ValidationErrors;
-                }
-                else
-                {
-                    // Extract errors that might be related to this task
-                    taskSpecificErrors = ExtractTaskRelevantErrors(task, validationResult.Errors);
-                }
+                var taskSpecificErrors = (task.ValidationErrors != null && task.ValidationErrors.Any())
+                    ? task.ValidationErrors
+                    : ExtractTaskRelevantErrors(task, validationResult.Errors);
                 
                 if (!taskSpecificErrors.Any())
                 {
@@ -100,17 +91,9 @@ public partial class ParallelExecutionEngine
         }
         
         // Find errors that mention these types
-        foreach (var error in allErrors)
-        {
-            foreach (var type in definedTypes)
-            {
-                if (error.Contains(type))
-                {
-                    relevantErrors.Add(error);
-                    break;
-                }
-            }
-        }
+        var matchingErrors = allErrors.Where(error => 
+            definedTypes.Any(type => error.Contains(type)));
+        relevantErrors.AddRange(matchingErrors);
         
         // Also check for namespace issues
         var namespaceMatch = System.Text.RegularExpressions.Regex.Match(
@@ -120,13 +103,9 @@ public partial class ParallelExecutionEngine
         if (namespaceMatch.Success)
         {
             var taskNamespace = namespaceMatch.Groups[1].Value;
-            foreach (var error in allErrors)
-            {
-                if (error.Contains(taskNamespace) && !relevantErrors.Contains(error))
-                {
-                    relevantErrors.Add(error);
-                }
-            }
+            var namespaceErrors = allErrors.Where(error => 
+                error.Contains(taskNamespace) && !relevantErrors.Contains(error));
+            relevantErrors.AddRange(namespaceErrors);
         }
         
         return relevantErrors;
@@ -141,10 +120,6 @@ public partial class ParallelExecutionEngine
         Dictionary<string, TaskNode> completedTasks)
     {
         Console.WriteLine("\n🔄 Attempting to fix validation errors by regenerating problematic code...");
-        
-        // For now, regenerate all tasks with the error context
-        // In a more sophisticated version, we could identify specific problematic tasks
-        var errorContext = string.Join("\n", validationResult.Errors);
         
         foreach (var task in tasks.Where(t => !string.IsNullOrWhiteSpace(t.GeneratedCode)))
         {

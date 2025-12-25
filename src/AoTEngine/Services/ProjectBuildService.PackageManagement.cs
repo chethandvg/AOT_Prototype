@@ -56,28 +56,25 @@ public partial class ProjectBuildService
             // Add explicitly specified packages from RequiredPackages
             if (task.RequiredPackages != null)
             {
-                foreach (var package in task.RequiredPackages)
+                var parsedPackageNames = task.RequiredPackages
+                    .Select(package => package.Split(':')[0].Trim());
+                foreach (var packageName in parsedPackageNames)
                 {
-                    // Parse package specification (e.g., "Newtonsoft.Json" or "Newtonsoft.Json:13.0.4")
-                    var parts = package.Split(':');
-                    var packageName = parts[0].Trim();
                     packageNames.Add(packageName);
                 }
             }
 
             // Extract packages from using statements in generated code
             var usings = ExtractUsingStatements(task.GeneratedCode);
-            foreach (var usingStatement in usings)
+            var matchingPackages = usings
+                .SelectMany(usingStatement => usingToPackageMap
+                    .Where(mapping => usingStatement.StartsWith(mapping.Key, StringComparison.OrdinalIgnoreCase))
+                    .Select(mapping => mapping.Value)
+                    .Take(1));
+            
+            foreach (var packageName in matchingPackages)
             {
-                // Check if this using statement maps to a known package
-                foreach (var mapping in usingToPackageMap)
-                {
-                    if (usingStatement.StartsWith(mapping.Key, StringComparison.OrdinalIgnoreCase))
-                    {
-                        packageNames.Add(mapping.Value);
-                        break;
-                    }
-                }
+                packageNames.Add(packageName);
             }
         }
 

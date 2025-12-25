@@ -4,7 +4,7 @@ using System.Text;
 namespace AoTEngine.Services;
 
 /// <summary>
-/// Partial class containing markdown generation methods for documentation.
+/// Partial class containing markdown generation and architecture summary methods for documentation.
 /// </summary>
 public partial class DocumentationService
 {

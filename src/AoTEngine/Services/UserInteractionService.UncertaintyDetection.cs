@@ -29,12 +29,10 @@ public partial class UserInteractionService
             { "suitable", "What would be suitable for this use case?" }
         };
         
-        foreach (var term in vagueTerms)
+        var matchingTerms = vagueTerms.Where(term => lowerDesc.Contains(term.Key));
+        foreach (var term in matchingTerms)
         {
-            if (lowerDesc.Contains(term.Key))
-            {
-                uncertainties.Add(term.Value);
-            }
+            uncertainties.Add(term.Value);
         }
         
         // Check for missing specifications

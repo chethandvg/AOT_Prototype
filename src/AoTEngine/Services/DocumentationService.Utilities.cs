@@ -72,18 +72,15 @@ public partial class DocumentationService
     /// </summary>
     private Dictionary<string, string> BuildModuleIndex(List<TaskNode> tasks)
     {
-        var index = new Dictionary<string, string>();
-        
-        foreach (var task in tasks)
-        {
-            foreach (var type in task.ExpectedTypes)
+        var index = tasks
+            .SelectMany(task => task.ExpectedTypes.Select(type => new
             {
-                var key = !string.IsNullOrEmpty(task.Namespace) 
+                Key = !string.IsNullOrEmpty(task.Namespace) 
                     ? $"{task.Namespace}.{type}" 
-                    : type;
-                index[key] = task.Id;
-            }
-        }
+                    : type,
+                TaskId = task.Id
+            }))
+            .ToDictionary(x => x.Key, x => x.TaskId);
         
         return index;
     }
@@ -150,16 +147,12 @@ public partial class DocumentationService
             return 0;
         }
         
-        var maxDepLevel = 0;
-        foreach (var depId in task.Dependencies)
-        {
-            var depTask = allTasks.FirstOrDefault(t => t.Id == depId);
-            if (depTask != null)
-            {
-                var depLevel = CalculateTaskLevel(depTask, allTasks, cache, visiting);
-                maxDepLevel = Math.Max(maxDepLevel, depLevel);
-            }
-        }
+        var maxDepLevel = task.Dependencies
+            .Select(depId => allTasks.FirstOrDefault(t => t.Id == depId))
+            .Where(depTask => depTask != null)
+            .Select(depTask => CalculateTaskLevel(depTask!, allTasks, cache, visiting))
+            .DefaultIfEmpty(0)
+            .Max();
         
         var level = maxDepLevel + 1;
         cache[task.Id] = level;

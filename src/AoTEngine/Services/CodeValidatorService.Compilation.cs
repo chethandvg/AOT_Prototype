@@ -206,16 +206,13 @@ public partial class CodeValidatorService
         }
 
         // Try to add directly specified assemblies
-        foreach (var assembly in missingAssemblies)
+        foreach (var assembly in missingAssemblies.Where(a => !alreadyAdded.Contains(a)))
         {
-            if (!alreadyAdded.Contains(assembly))
+            if (TryLoadAssembly(assembly, references))
             {
-                if (TryLoadAssembly(assembly, references))
-                {
-                    alreadyAdded.Add(assembly);
-                    addedAny = true;
-                    Console.WriteLine($"   ✓ Added assembly: {assembly}");
-                }
+                alreadyAdded.Add(assembly);
+                addedAny = true;
+                Console.WriteLine($"   ✓ Added assembly: {assembly}");
             }
         }
 
@@ -234,17 +231,13 @@ public partial class CodeValidatorService
         bool added = false;
 
         // Direct mapping
-        if (config.NamespaceToAssemblyMappings.TryGetValue(ns, out var assemblyName))
+        if (config.NamespaceToAssemblyMappings.TryGetValue(ns, out var assemblyName) &&
+            !alreadyAdded.Contains(assemblyName) &&
+            TryLoadAssembly(assemblyName, references))
         {
-            if (!alreadyAdded.Contains(assemblyName))
-            {
-                if (TryLoadAssembly(assemblyName, references))
-                {
-                    alreadyAdded.Add(assemblyName);
-                    added = true;
-                    Console.WriteLine($"   ✓ Added assembly '{assemblyName}' for namespace '{ns}'");
-                }
-            }
+            alreadyAdded.Add(assemblyName);
+            added = true;
+            Console.WriteLine($"   ✓ Added assembly '{assemblyName}' for namespace '{ns}'");
         }
 
         // Check for partial matches (e.g., Microsoft.Extensions.DependencyInjection.Abstractions)
@@ -252,16 +245,13 @@ public partial class CodeValidatorService
             .Where(kvp => ns.StartsWith(kvp.Key) || kvp.Key.StartsWith(ns))
             .ToList();
 
-        foreach (var mapping in relatedMappings)
+        foreach (var mapping in relatedMappings.Where(m => !alreadyAdded.Contains(m.Value)))
         {
-            if (!alreadyAdded.Contains(mapping.Value))
+            if (TryLoadAssembly(mapping.Value, references))
             {
-                if (TryLoadAssembly(mapping.Value, references))
-                {
-                    alreadyAdded.Add(mapping.Value);
-                    added = true;
-                    Console.WriteLine($"   ✓ Added related assembly '{mapping.Value}' for namespace '{ns}'");
-                }
+                alreadyAdded.Add(mapping.Value);
+                added = true;
+                Console.WriteLine($"   ✓ Added related assembly '{mapping.Value}' for namespace '{ns}'");
             }
         }
 
