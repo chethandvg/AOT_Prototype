@@ -56,6 +56,11 @@ public class AoTResult
     /// Paths where documentation files were saved (if applicable).
     /// </summary>
     public DocumentationPaths? DocumentationPaths { get; set; }
+
+    /// <summary>
+    /// The frozen contract catalog (if contract-first generation was used).
+    /// </summary>
+    public ContractCatalog? ContractCatalog { get; set; }
 }
 
 /// <summary>
