@@ -83,16 +83,14 @@ public class AoTEngineOrchestrator
             if (enableComplexityAnalysis)
             {
                 Console.WriteLine($"\nStep 1.5: Analyzing task complexity (max {maxLinesPerTask} lines per task)...");
+                var originalTaskCount = result.Tasks.Count;
                 result.Tasks = await _executionEngine.AnalyzeAndDecomposeComplexTasksAsync(
                     result.Tasks, 
                     maxLinesPerTask);
                 
-                // Update decomposition tasks reference for downstream processing
-                decomposition.Tasks = result.Tasks;
-                
-                if (result.Tasks.Count > decomposition.Tasks.Count)
+                if (result.Tasks.Count != originalTaskCount)
                 {
-                    Console.WriteLine($"📋 Tasks after complexity analysis: {result.Tasks.Count}");
+                    Console.WriteLine($"📋 Tasks after complexity analysis: {result.Tasks.Count} (was {originalTaskCount})");
                 }
             }
 

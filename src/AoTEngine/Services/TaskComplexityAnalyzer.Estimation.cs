@@ -57,15 +57,15 @@ public partial class TaskComplexityAnalyzer
 
         // Check description length (longer descriptions often mean more complexity)
         var wordCount = task.Description.Split(' ', StringSplitOptions.RemoveEmptyEntries).Length;
-        if (wordCount > 30)
-        {
-            score += 5;
-            factors.Add("Detailed requirements specification");
-        }
-        else if (wordCount > 50)
+        if (wordCount > 50)
         {
             score += 10;
             factors.Add("Very detailed requirements specification");
+        }
+        else if (wordCount > 30)
+        {
+            score += 5;
+            factors.Add("Detailed requirements specification");
         }
 
         return Math.Min(25, score);
@@ -220,9 +220,12 @@ public partial class TaskComplexityAnalyzer
     /// </summary>
     private int CalculateRecommendedSubtasks(ComplexityMetrics metrics)
     {
+        // Ensure threshold is at least 1 to prevent division by zero
+        var threshold = Math.Max(1, metrics.MaxLineThreshold);
+        
         // Calculate based on line count
         var lineBasedCount = (int)Math.Ceiling(
-            (double)metrics.EstimatedLineCount / metrics.MaxLineThreshold);
+            (double)metrics.EstimatedLineCount / threshold);
 
         // Calculate based on type count
         var typeBasedCount = Math.Max(1, metrics.ExpectedTypeCount);

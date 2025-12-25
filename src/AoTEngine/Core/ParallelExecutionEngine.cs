@@ -16,7 +16,6 @@ public class ParallelExecutionEngine
     private readonly DocumentationService? _documentationService;
     private readonly TaskComplexityAnalyzer _complexityAnalyzer;
     private readonly string? _outputDirectory;
-    private readonly string? _apiKey;
     private const int MaxRetries = 3;
     private const int DefaultMaxLineThreshold = 100;
 
@@ -26,8 +25,7 @@ public class ParallelExecutionEngine
         UserInteractionService userInteractionService,
         ProjectBuildService? buildService = null,
         string? outputDirectory = null,
-        DocumentationService? documentationService = null,
-        string? apiKey = null)
+        DocumentationService? documentationService = null)
     {
         _openAIService = openAIService;
         _validatorService = validatorService;
@@ -36,7 +34,6 @@ public class ParallelExecutionEngine
         _outputDirectory = outputDirectory;
         _documentationService = documentationService;
         _complexityAnalyzer = new TaskComplexityAnalyzer();
-        _apiKey = apiKey;
     }
 
     /// <summary>

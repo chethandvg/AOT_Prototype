@@ -1,6 +1,4 @@
 using AoTEngine.Models;
-using Newtonsoft.Json;
-using OpenAI.Chat;
 
 namespace AoTEngine.Services;
 
@@ -12,15 +10,12 @@ public partial class AutoDecomposer
 {
     private readonly OpenAIService _openAIService;
     private readonly TaskComplexityAnalyzer _complexityAnalyzer;
-    private readonly ChatClient _chatClient;
-    private const int MaxRetries = 3;
     private const int DefaultMaxLineThreshold = 100;
 
-    public AutoDecomposer(OpenAIService openAIService, string apiKey, string model = "gpt-4")
+    public AutoDecomposer(OpenAIService openAIService)
     {
         _openAIService = openAIService;
         _complexityAnalyzer = new TaskComplexityAnalyzer();
-        _chatClient = new ChatClient(model, apiKey);
     }
 
     /// <summary>
@@ -80,7 +75,7 @@ public partial class AutoDecomposer
     }
 
     /// <summary>
-    /// Gets subtasks from OpenAI based on decomposition type.
+    /// Gets subtasks from OpenAI using the OpenAIService.
     /// </summary>
     private async Task<List<TaskNode>?> GetSubtasksFromOpenAIAsync(
         TaskNode task,
@@ -88,55 +83,21 @@ public partial class AutoDecomposer
         DecompositionType type,
         int maxLineThreshold)
     {
-        var systemPrompt = GetDecompositionSystemPrompt(type, maxLineThreshold);
-        var userPrompt = GetDecompositionUserPrompt(task, metrics, type, maxLineThreshold);
-
-        var messages = new List<ChatMessage>
+        try
         {
-            new SystemChatMessage(systemPrompt),
-            new UserChatMessage(userPrompt)
-        };
-
-        for (int attempt = 0; attempt < MaxRetries; attempt++)
-        {
-            try
-            {
-                var completion = await _chatClient.CompleteChatAsync(messages);
-                var contentParts = completion.Value.Content;
-
-                if (contentParts == null || contentParts.Count == 0)
-                {
-                    if (attempt == MaxRetries - 1)
-                    {
-                        throw new InvalidOperationException("OpenAI returned no content for decomposition.");
-                    }
-                    await Task.Delay(1000 * (attempt + 1));
-                    continue;
-                }
-
-                var content = contentParts[0].Text.Trim();
-                var response = JsonConvert.DeserializeObject<SubtaskDecompositionResponse>(content);
-
-                if (response?.Subtasks != null && response.Subtasks.Any())
-                {
-                    return response.Subtasks;
-                }
-            }
-            catch (HttpRequestException ex)
-            {
-                if (attempt == MaxRetries - 1) throw;
-                Console.WriteLine($"HTTP error during decomposition (attempt {attempt + 1}): {ex.Message}");
-                await Task.Delay(1000 * (attempt + 1));
-            }
-            catch (JsonException ex)
-            {
-                if (attempt == MaxRetries - 1) throw;
-                Console.WriteLine($"JSON parsing error during decomposition (attempt {attempt + 1}): {ex.Message}");
-                await Task.Delay(1000 * (attempt + 1));
-            }
+            // Use OpenAIService's decomposition method
+            var subtasks = await _openAIService.DecomposeComplexTaskAsync(
+                task,
+                metrics.RecommendedSubtaskCount,
+                maxLineThreshold);
+            
+            return subtasks;
         }
-
-        return null;
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error getting subtasks from OpenAI: {ex.Message}");
+            return null;
+        }
     }
 
     /// <summary>
@@ -174,70 +135,4 @@ public partial class AutoDecomposer
         // Default to functional decomposition
         return DecompositionType.Functional;
     }
-
-    /// <summary>
-    /// Gets the system prompt for decomposition based on type.
-    /// </summary>
-    private string GetDecompositionSystemPrompt(DecompositionType type, int maxLineThreshold)
-    {
-        var basePrompt = $@"You are an expert C# software architect specializing in code decomposition.
-Your task is to break down complex coding tasks into smaller subtasks.
-
-CRITICAL CONSTRAINTS:
-1. Each subtask must generate NO MORE than {maxLineThreshold} lines of code
-2. Subtasks must be independent and compilable
-3. Maintain proper dependencies between subtasks
-4. Ensure no circular dependencies
-
-";
-        return type switch
-        {
-            DecompositionType.PartialClass => basePrompt + GetPartialClassPrompt(),
-            DecompositionType.InterfaceBased => basePrompt + GetInterfaceBasedPrompt(),
-            DecompositionType.LayerBased => basePrompt + GetLayerBasedPrompt(),
-            _ => basePrompt + GetFunctionalPrompt()
-        };
-    }
-
-    private string GetFunctionalPrompt() => @"
-FUNCTIONAL DECOMPOSITION STRATEGY:
-- Split by logical functionality (e.g., models, services, utilities)
-- Each subtask handles one cohesive concern
-- Use clear naming: task1_models, task1_service, task1_utils";
-
-    private string GetPartialClassPrompt() => @"
-PARTIAL CLASS DECOMPOSITION STRATEGY:
-- Use C# partial classes to split large classes
-- First part contains: fields, properties, constructors
-- Subsequent parts contain: method groups by functionality
-- Use naming pattern: ClassName.Part1.cs, ClassName.Part2.cs
-- All parts must be in the SAME namespace";
-
-    private string GetInterfaceBasedPrompt() => @"
-INTERFACE-BASED DECOMPOSITION STRATEGY:
-- First subtask: Define interfaces and contracts
-- Second subtask: Implement the interfaces
-- Use dependency injection patterns
-- Keep interfaces in a separate namespace if needed";
-
-    private string GetLayerBasedPrompt() => @"
-LAYER-BASED DECOMPOSITION STRATEGY:
-- Split by architectural layers (Models, Services, Repository, etc.)
-- Maintain proper layer dependencies (top to bottom)
-- Use abstractions between layers";
-}
-
-/// <summary>
-/// Response model for subtask decomposition from OpenAI.
-/// </summary>
-internal class SubtaskDecompositionResponse
-{
-    [JsonProperty("subtasks")]
-    public List<TaskNode> Subtasks { get; set; } = new();
-
-    [JsonProperty("shared_fields")]
-    public List<string>? SharedFields { get; set; }
-
-    [JsonProperty("shared_interfaces")]
-    public List<string>? SharedInterfaces { get; set; }
 }
