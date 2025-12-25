@@ -13,19 +13,25 @@ public class AoTEngineOrchestrator
     private readonly CodeMergerService _mergerService;
     private readonly UserInteractionService _userInteractionService;
     private readonly CodeValidatorService _validatorService;
+    private readonly DocumentationService? _documentationService;
+    private readonly DocumentationConfig? _documentationConfig;
 
     public AoTEngineOrchestrator(
         OpenAIService openAIService,
         ParallelExecutionEngine executionEngine,
         CodeMergerService mergerService,
         UserInteractionService userInteractionService,
-        CodeValidatorService validatorService)
+        CodeValidatorService validatorService,
+        DocumentationService? documentationService = null,
+        DocumentationConfig? documentationConfig = null)
     {
         _openAIService = openAIService;
         _executionEngine = executionEngine;
         _mergerService = mergerService;
         _userInteractionService = userInteractionService;
         _validatorService = validatorService;
+        _documentationService = documentationService;
+        _documentationConfig = documentationConfig;
     }
 
     /// <summary>
@@ -77,7 +83,8 @@ public class AoTEngineOrchestrator
                     _validatorService,
                     _userInteractionService,
                     buildService,
-                    outputDirectory);
+                    outputDirectory,
+                    _documentationService);
             }
             else
             {
@@ -143,6 +150,46 @@ public class AoTEngineOrchestrator
             Console.WriteLine("\nStep 5: Generating execution report...");
             result.ExecutionReport = _mergerService.CreateExecutionReport(result.Tasks, result.FinalCode);
 
+            // Step 6: Synthesize documentation (if enabled)
+            if (_documentationService != null && (_documentationConfig?.Enabled ?? true))
+            {
+                Console.WriteLine("\nStep 6: Synthesizing project documentation...");
+                try
+                {
+                    result.ProjectDocumentation = await _documentationService.SynthesizeProjectDocumentationAsync(
+                        result.Tasks,
+                        userRequest,
+                        result.Description);
+                    
+                    result.FinalDocumentation = GenerateMarkdownFromDocumentation(result.ProjectDocumentation);
+                    
+                    // Export documentation files if output directory is specified
+                    if (!string.IsNullOrEmpty(outputDirectory))
+                    {
+                        result.DocumentationPaths = new DocumentationPaths();
+                        
+                        var docPath = Path.Combine(outputDirectory, "Documentation.md");
+                        await _documentationService.ExportMarkdownAsync(result.ProjectDocumentation, docPath);
+                        result.DocumentationPaths.MarkdownPath = docPath;
+                        
+                        var jsonPath = Path.Combine(outputDirectory, "Documentation.json");
+                        await _documentationService.ExportJsonAsync(result.ProjectDocumentation, jsonPath);
+                        result.DocumentationPaths.JsonPath = jsonPath;
+                        
+                        var jsonlPath = Path.Combine(outputDirectory, "training_data.jsonl");
+                        await _documentationService.ExportJsonlDatasetAsync(result.ProjectDocumentation, jsonlPath);
+                        result.DocumentationPaths.JsonlDatasetPath = jsonlPath;
+                    }
+                    
+                    Console.WriteLine("✅ Documentation synthesis complete.");
+                }
+                catch (Exception docEx)
+                {
+                    // Documentation failure should not fail the overall execution
+                    Console.WriteLine($"⚠️  Documentation synthesis failed: {docEx.Message}");
+                }
+            }
+
             result.Success = true;
             Console.WriteLine("\n✓ AoT Engine execution completed successfully!");
         }
@@ -158,6 +205,43 @@ public class AoTEngineOrchestrator
         }
 
         return result;
+    }
+    
+    /// <summary>
+    /// Generates a simple markdown summary from project documentation.
+    /// </summary>
+    private string GenerateMarkdownFromDocumentation(ProjectDocumentation doc)
+    {
+        var sb = new System.Text.StringBuilder();
+        
+        sb.AppendLine("# Project Documentation");
+        sb.AppendLine();
+        sb.AppendLine($"**Generated:** {doc.GeneratedAtUtc:yyyy-MM-dd HH:mm:ss} UTC");
+        sb.AppendLine();
+        
+        if (!string.IsNullOrEmpty(doc.HighLevelArchitectureSummary))
+        {
+            sb.AppendLine("## Architecture Overview");
+            sb.AppendLine();
+            sb.AppendLine(doc.HighLevelArchitectureSummary);
+            sb.AppendLine();
+        }
+        
+        sb.AppendLine("## Task Summaries");
+        sb.AppendLine();
+        
+        foreach (var record in doc.TaskRecords)
+        {
+            sb.AppendLine($"### {record.TaskId}");
+            sb.AppendLine($"**Purpose:** {record.Purpose}");
+            if (!string.IsNullOrEmpty(record.ValidationNotes))
+            {
+                sb.AppendLine($"**Validation:** {record.ValidationNotes}");
+            }
+            sb.AppendLine();
+        }
+        
+        return sb.ToString();
     }
 }
 
@@ -200,4 +284,40 @@ public class AoTResult
     /// Error message if execution failed.
     /// </summary>
     public string ErrorMessage { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Aggregated human-readable documentation for the project.
+    /// </summary>
+    public string FinalDocumentation { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Complete project documentation with structured task summaries.
+    /// </summary>
+    public ProjectDocumentation? ProjectDocumentation { get; set; }
+
+    /// <summary>
+    /// Paths where documentation files were saved (if applicable).
+    /// </summary>
+    public DocumentationPaths? DocumentationPaths { get; set; }
+}
+
+/// <summary>
+/// Contains paths to generated documentation files.
+/// </summary>
+public class DocumentationPaths
+{
+    /// <summary>
+    /// Path to the markdown documentation file.
+    /// </summary>
+    public string? MarkdownPath { get; set; }
+
+    /// <summary>
+    /// Path to the JSON documentation file.
+    /// </summary>
+    public string? JsonPath { get; set; }
+
+    /// <summary>
+    /// Path to the JSONL training dataset file.
+    /// </summary>
+    public string? JsonlDatasetPath { get; set; }
 }
