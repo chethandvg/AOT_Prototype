@@ -438,3 +438,186 @@ The project implements a layered database service architecture...
 
 ### Issue: Unexpected Subtask Count (NEW)
 **Solution:** Adjust `MaxLinesPerTask` in configuration. Lower values create more subtasks, higher values allow larger code blocks. Default is 300 lines.
+
+## Checkpoint System (NEW)
+
+The checkpoint system automatically saves execution state during task execution, enabling progress tracking and recovery.
+
+### Automatic Checkpoint Creation
+
+When an output directory is specified, checkpoints are automatically saved after each task completes:
+
+```
+💾 Checkpoint saved: checkpoint_20251225_103000.json
+```
+
+### Checkpoint File Structure
+
+```
+outputDirectory/
+├── checkpoints/
+│   ├── checkpoint_20251225_103000.json  # Timestamped checkpoint
+│   ├── checkpoint_20251225_103000.md    # Human-readable version
+│   ├── checkpoint_20251225_104500.json  # Later checkpoint
+│   ├── checkpoint_20251225_104500.md
+│   ├── latest.json                       # Latest checkpoint (copy)
+│   └── latest.md                         # Latest checkpoint (copy)
+└── GeneratedCode_*/                      # Generated project files
+```
+
+### Checkpoint Contents
+
+Each checkpoint includes:
+- **Project Information**: Original request and description
+- **Progress Tracking**: Total, completed, pending, and failed task counts
+- **Completed Tasks**: Full details with generated code, validation status
+- **Dependency Graph**: Task relationships and dependencies
+- **Architecture Summary**: Current state of the architecture
+- **Timestamps**: When checkpoint was created and tasks completed
+
+### Example Checkpoint (JSON)
+
+```json
+{
+  "checkpoint_timestamp": "2025-12-25T10:30:00Z",
+  "project_request": "Create a simple calculator",
+  "project_description": "Calculator with basic operations",
+  "total_tasks": 5,
+  "completed_tasks": 3,
+  "pending_tasks": 2,
+  "failed_tasks": 0,
+  "completed_task_details": [
+    {
+      "task_id": "task1",
+      "description": "Create calculator class",
+      "dependencies": [],
+      "expected_types": ["Calculator"],
+      "namespace": "CalculatorApp",
+      "generated_code": "public class Calculator { ... }",
+      "validation_status": "validated",
+      "validation_attempts": 1,
+      "completed_at": "2025-12-25T10:25:00Z",
+      "summary": "Calculator class with basic operations"
+    }
+  ],
+  "pending_task_ids": ["task4", "task5"],
+  "dependency_graph": {
+    "task1": [],
+    "task2": ["task1"],
+    "task3": ["task1"]
+  },
+  "execution_status": "in_progress"
+}
+```
+
+### Example Checkpoint (Markdown)
+
+```markdown
+# Execution Checkpoint
+
+**Timestamp:** 2025-12-25 10:30:00 UTC
+**Status:** in_progress
+
+## Project Overview
+
+**Request:** Create a simple calculator
+**Description:** Calculator with basic operations
+
+## Execution Progress
+
+**Total Tasks:** 5
+**Completed:** 3
+**Pending:** 2
+**Failed:** 0
+**Progress:** 60.0% (3/5 tasks)
+
+## Completed Tasks
+
+### task1
+**Description:** Create calculator class
+**Namespace:** CalculatorApp
+**Validation Status:** validated
+**Validation Attempts:** 1
+
+**Generated Code:**
+```csharp
+public class Calculator { ... }
+```
+
+## Pending Tasks
+- task4
+- task5
+
+## Dependency Graph
+- task1 → [None]
+- task2 → [task1]
+- task3 → [task1]
+```
+
+### Programmatic Usage
+
+```csharp
+// Load latest checkpoint
+var checkpointService = new CheckpointService("./output");
+var latestPath = checkpointService.GetLatestCheckpoint("./output");
+var checkpoint = await checkpointService.LoadCheckpointAsync(latestPath);
+
+Console.WriteLine($"Completed: {checkpoint.CompletedTasks}/{checkpoint.TotalTasks}");
+Console.WriteLine($"Status: {checkpoint.ExecutionStatus}");
+
+// Examine completed tasks
+foreach (var task in checkpoint.CompletedTaskDetails)
+{
+    Console.WriteLine($"Task {task.TaskId}: {task.Description}");
+    Console.WriteLine($"Code: {task.GeneratedCode.Substring(0, 100)}...");
+}
+```
+
+### Configuration Options
+
+**Enable/Disable Checkpoints:**
+```csharp
+var executionEngine = new ParallelExecutionEngine(
+    openAIService, 
+    validatorService,
+    userInteractionService,
+    buildService,
+    outputDirectory: "./output",
+    documentationService,
+    saveCheckpoints: true);  // Default: true when outputDirectory exists
+```
+
+**Adjust Checkpoint Frequency:**
+```csharp
+var executionEngine = new ParallelExecutionEngine(
+    openAIService, 
+    validatorService,
+    userInteractionService,
+    buildService,
+    outputDirectory: "./output",
+    documentationService,
+    saveCheckpoints: true,
+    checkpointFrequency: 5);  // Save every 5 tasks (default: 1)
+```
+
+### Use Cases
+
+1. **Progress Monitoring**: Check `latest.md` to see current execution state
+2. **Recovery Planning**: Understand what was completed before an interruption
+3. **Debugging**: Examine generated code and dependencies at any checkpoint
+4. **Audit Trail**: Track the evolution of the project over time
+5. **Documentation**: Human-readable progress reports for stakeholders
+
+### Checkpoint vs Documentation
+
+- **Checkpoints**: Incremental snapshots saved during execution
+  - Created after each task (or every N tasks)
+  - Shows work in progress
+  - Includes pending and failed tasks
+  - Useful for recovery and monitoring
+  
+- **Documentation**: Final comprehensive documentation
+  - Created after all tasks complete
+  - Shows final architecture
+  - Includes only successful tasks
+  - Useful for understanding the complete project
