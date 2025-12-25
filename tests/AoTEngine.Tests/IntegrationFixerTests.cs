@@ -58,12 +58,20 @@ namespace TestNamespace
         // Act
         var result = _fixer.AddMissingUsings(code, missingNamespaces);
 
-        // Assert - normalize whitespace for comparison
-        var normalizedResult = result.Replace(" ", "");
-        // Count occurrences of "usingSystem;"
-        var count = normalizedResult.Split(new[] { "usingSystem;" }, StringSplitOptions.None).Length - 1;
-        Assert.Equal(1, count); // Should only appear once
-        Assert.Contains("usingSystem.Linq;", normalizedResult);
+        // Assert - Use Roslyn to parse and count actual using directives
+        var syntaxTree = CSharpSyntaxTree.ParseText(result);
+        var root = (Microsoft.CodeAnalysis.CSharp.Syntax.CompilationUnitSyntax)syntaxTree.GetRoot();
+        
+        // Count "System" (not "System.Linq" or other System.* namespaces)
+        var systemUsingCount = root.Usings.Count(u => 
+        {
+            var name = u.Name?.ToString();
+            return name == "System";
+        });
+        Assert.Equal(1, systemUsingCount); // Should only appear once
+        
+        // Check System.Linq is present by looking at the resulting string
+        Assert.Contains("System.Linq", result);
     }
 
     [Fact]
@@ -371,8 +379,8 @@ namespace MyApp
 
         // Assert
         Assert.NotEmpty(result.AppliedFixes);
-        // The fix should have kept first definition
-        Assert.Contains(result.AppliedFixes, f => f.Contains("Kept first definition"));
+        // The fix should have kept first definition (message starts with this prefix)
+        Assert.Contains(result.AppliedFixes, f => f.StartsWith("Kept first definition of "));
     }
 
     [Fact]

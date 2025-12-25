@@ -81,13 +81,23 @@ public class CheckpointResult
 /// </summary>
 public class IntegrationCheckpointHandler
 {
-    private readonly UserInteractionService _userInteractionService;
     private readonly bool _interactive;
 
-    public IntegrationCheckpointHandler(UserInteractionService? userInteractionService = null, bool interactive = true)
+    public IntegrationCheckpointHandler(bool interactive = true)
     {
-        _userInteractionService = userInteractionService ?? new UserInteractionService();
         _interactive = interactive;
+    }
+
+    /// <summary>
+    /// Creates a handler with optional interactive mode.
+    /// </summary>
+    /// <param name="userInteractionService">Reserved for future use with custom user interaction implementations.</param>
+    /// <param name="interactive">Whether to enable interactive prompts.</param>
+    public IntegrationCheckpointHandler(UserInteractionService? userInteractionService = null, bool interactive = true)
+        : this(interactive)
+    {
+        // UserInteractionService parameter kept for API compatibility but not currently used.
+        // Interactive prompts use Console directly. Future implementations could delegate to this service.
     }
 
     /// <summary>

@@ -51,8 +51,9 @@ public class IntegrationFixer
     /// Default known namespace mappings for common .NET types.
     /// These are used when resolving missing using statements.
     /// Can be extended via constructor or AddTypeNamespaceMapping method.
+    /// Note: Uses case-sensitive comparison since C# type names are case-sensitive.
     /// </summary>
-    private static readonly Dictionary<string, string> DefaultKnownTypeNamespaces = new(StringComparer.OrdinalIgnoreCase)
+    private static readonly Dictionary<string, string> DefaultKnownTypeNamespaces = new(StringComparer.Ordinal)
     {
         // Microsoft.Extensions types
         { "ILogger", "Microsoft.Extensions.Logging" },
@@ -85,7 +86,8 @@ public class IntegrationFixer
     {
         _typeRegistry = typeRegistry;
         _symbolTable = symbolTable;
-        _customTypeNamespaces = customTypeNamespaces ?? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        // Use case-sensitive comparison since C# type names are case-sensitive
+        _customTypeNamespaces = customTypeNamespaces ?? new Dictionary<string, string>(StringComparer.Ordinal);
     }
 
     /// <summary>
@@ -101,10 +103,18 @@ public class IntegrationFixer
     /// </summary>
     private bool TryGetTypeNamespace(string typeName, out string? namespaceName)
     {
-        if (_customTypeNamespaces.TryGetValue(typeName, out namespaceName))
+        if (_customTypeNamespaces.TryGetValue(typeName, out var customNamespace))
+        {
+            namespaceName = customNamespace;
             return true;
-        if (DefaultKnownTypeNamespaces.TryGetValue(typeName, out namespaceName))
+        }
+
+        if (DefaultKnownTypeNamespaces.TryGetValue(typeName, out var defaultNamespace))
+        {
+            namespaceName = defaultNamespace;
             return true;
+        }
+
         namespaceName = null;
         return false;
     }
@@ -219,24 +229,30 @@ public class IntegrationFixer
             .OfType<ClassDeclarationSyntax>()
             .ToList();
 
-        var newRoot = root;
-        foreach (var classDecl in classDeclarations)
-        {
-            var ns = GetNamespace(classDecl);
-            var fullName = string.IsNullOrEmpty(ns) ? classDecl.Identifier.Text : $"{ns}.{classDecl.Identifier.Text}";
-
-            if (typeNamesToConvert.Contains(fullName) && !classDecl.Modifiers.Any(SyntaxKind.PartialKeyword))
+        // Use ReplaceNodes to handle all replacements at once, avoiding the issue
+        // of old nodes no longer being part of the tree after individual replacements
+        var newRoot = root.ReplaceNodes(
+            classDeclarations,
+            (original, rewritten) =>
             {
-                // Add partial modifier
-                var partialToken = SyntaxFactory.Token(SyntaxKind.PartialKeyword)
-                    .WithTrailingTrivia(SyntaxFactory.Space);
-                var newModifiers = classDecl.Modifiers.Add(partialToken);
-                var newClassDecl = classDecl.WithModifiers(newModifiers);
-                newRoot = newRoot.ReplaceNode(classDecl, newClassDecl);
-            }
-        }
+                var ns = GetNamespace(original);
+                var fullName = string.IsNullOrEmpty(ns)
+                    ? original.Identifier.Text
+                    : $"{ns}.{original.Identifier.Text}";
 
-        return newRoot.ToFullString();
+                if (typeNamesToConvert.Contains(fullName) && !original.Modifiers.Any(SyntaxKind.PartialKeyword))
+                {
+                    // Add partial modifier
+                    var partialToken = SyntaxFactory.Token(SyntaxKind.PartialKeyword)
+                        .WithTrailingTrivia(SyntaxFactory.Space);
+                    var newModifiers = original.Modifiers.Add(partialToken);
+                    return original.WithModifiers(newModifiers);
+                }
+
+                return original;
+            });
+
+        return newRoot?.ToFullString() ?? code;
     }
 
     /// <summary>
@@ -271,9 +287,15 @@ public class IntegrationFixer
     }
 
     /// <summary>
+    /// Number of characters to look back when checking for namespace declaration context.
+    /// </summary>
+    private const int NamespaceContextSearchLength = 20;
+
+    /// <summary>
     /// Resolves ambiguous type references by fully qualifying them.
-    /// Note: This uses a regex-based approach which may not catch all edge cases.
-    /// For more precise resolution, consider using Roslyn semantic analysis.
+    /// Note: This method uses a regex-based heuristic to update type references and may not handle all
+    /// edge cases correctly (for example, complex generics, aliasing, or conditional compilation).
+    /// For more precise resolution, a Roslyn semantic model-based approach would be needed.
     /// </summary>
     public string ResolveAmbiguousReferences(string code, Dictionary<string, string> ambiguousTypeToFullName)
     {
@@ -283,14 +305,23 @@ public class IntegrationFixer
         var result = code;
         foreach (var (simpleName, fullyQualified) in ambiguousTypeToFullName)
         {
-            // Regex pattern explanation:
-            // (?<!\bnamespace\s+.*?) - Negative lookbehind: not preceded by "namespace " (to avoid namespace declarations)
-            // (?<!\.)               - Negative lookbehind: not preceded by a dot (to avoid already-qualified names)
-            // (?<![a-zA-Z0-9_])     - Negative lookbehind: not preceded by identifier chars (word boundary)
-            // {escapedName}         - The type name we're replacing
-            // (?![a-zA-Z0-9_])      - Negative lookahead: not followed by identifier chars (word boundary)
-            var pattern = $@"(?<!\bnamespace\s+.*?)(?<!\.)(?<![a-zA-Z0-9_]){Regex.Escape(simpleName)}(?![a-zA-Z0-9_])";
-            result = Regex.Replace(result, pattern, fullyQualified);
+            // Use a simpler pattern that avoids variable-length lookbehinds (not supported in .NET regex).
+            // This pattern matches the type name as a whole word, not preceded by a dot.
+            // (?<!\.)           - Not preceded by a dot (to avoid already-qualified names)
+            // \b                - Word boundary
+            // {escapedName}     - The type name we're replacing
+            // \b                - Word boundary (ensures we match complete identifiers)
+            var pattern = $@"(?<!\.)\b{Regex.Escape(simpleName)}\b";
+            result = Regex.Replace(result, pattern, match =>
+            {
+                // Skip if this appears to be in a namespace declaration context
+                var startIndex = Math.Max(0, match.Index - NamespaceContextSearchLength);
+                var length = Math.Min(NamespaceContextSearchLength, match.Index);
+                var prefix = result.Substring(startIndex, length);
+                if (prefix.Contains("namespace "))
+                    return match.Value;
+                return fullyQualified;
+            });
         }
 
         return result;

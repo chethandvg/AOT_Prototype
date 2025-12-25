@@ -281,6 +281,21 @@ public partial class CodeMergerService
 
         foreach (var member in typeDecl.Members)
         {
+            // Handle field declarations specially since they can declare multiple variables (e.g., "int x, y, z;")
+            if (member is FieldDeclarationSyntax field)
+            {
+                foreach (var variable in field.Declaration.Variables)
+                {
+                    members.Add(new MemberSignature
+                    {
+                        Name = variable.Identifier.Text,
+                        Kind = ProjectMemberKind.Field,
+                        ReturnType = field.Declaration.Type.ToString()
+                    });
+                }
+                continue;
+            }
+
             var sig = member switch
             {
                 ConstructorDeclarationSyntax ctor => new MemberSignature
@@ -306,13 +321,6 @@ public partial class CodeMergerService
                     Kind = ProjectMemberKind.Property,
                     ReturnType = prop.Type.ToString()
                 },
-                FieldDeclarationSyntax field => field.Declaration.Variables
-                    .Select(v => new MemberSignature
-                    {
-                        Name = v.Identifier.Text,
-                        Kind = ProjectMemberKind.Field,
-                        ReturnType = field.Declaration.Type.ToString()
-                    }).FirstOrDefault(),
                 _ => null
             };
 
@@ -463,6 +471,8 @@ public partial class CodeMergerService
 
     /// <summary>
     /// Cached default references for compilation. Initialized lazily and reused.
+    /// Note: These references are assumed to be immutable for the lifetime of the service.
+    /// If assembly configuration changes at runtime, create a new CodeMergerService instance.
     /// </summary>
     private List<MetadataReference>? _cachedDefaultReferences;
 
@@ -476,13 +486,33 @@ public partial class CodeMergerService
             // Compile and get diagnostics
             var syntaxTree = CSharpSyntaxTree.ParseText(code);
             
-            // Use cached references for efficiency
-            _cachedDefaultReferences ??= _validatorService.GetDefaultReferences();
+            // Use cached references for efficiency with null/exception safety
+            var references = _cachedDefaultReferences;
+            if (references == null)
+            {
+                try
+                {
+                    references = _validatorService.GetDefaultReferences() ?? new List<MetadataReference>();
+                    _cachedDefaultReferences = references;
+                }
+                catch (Exception ex)
+                {
+                    return new IntegrationFixResult
+                    {
+                        Success = false,
+                        FixedCode = code,
+                        UnfixableErrors = new List<string>
+                        {
+                            $"Failed to get default references for integration check: {ex.Message}"
+                        }
+                    };
+                }
+            }
             
             var compilation = CSharpCompilation.Create(
                 $"IntegrationCheck_{Guid.NewGuid():N}",
                 new[] { syntaxTree },
-                _cachedDefaultReferences,
+                references,
                 new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
 
             var diagnostics = compilation.GetDiagnostics();
@@ -551,19 +581,16 @@ public partial class CodeMergerService
 
     private string ApplyPartialConversionIfNeeded(MemberDeclarationSyntax member, string taskId)
     {
-        if (member is ClassDeclarationSyntax classDecl)
+        // Combine if statements for cleaner code
+        if (member is ClassDeclarationSyntax classDecl
+            && _typesToConvertToPartial.Contains((taskId, classDecl.Identifier.Text))
+            && !classDecl.Modifiers.Any(SyntaxKind.PartialKeyword))
         {
-            if (_typesToConvertToPartial.Contains((taskId, classDecl.Identifier.Text)))
-            {
-                if (!classDecl.Modifiers.Any(SyntaxKind.PartialKeyword))
-                {
-                    var partialToken = SyntaxFactory.Token(SyntaxKind.PartialKeyword)
-                        .WithTrailingTrivia(SyntaxFactory.Space);
-                    var newModifiers = classDecl.Modifiers.Add(partialToken);
-                    var newClassDecl = classDecl.WithModifiers(newModifiers);
-                    return newClassDecl.ToFullString();
-                }
-            }
+            var partialToken = SyntaxFactory.Token(SyntaxKind.PartialKeyword)
+                .WithTrailingTrivia(SyntaxFactory.Space);
+            var newModifiers = classDecl.Modifiers.Add(partialToken);
+            var newClassDecl = classDecl.WithModifiers(newModifiers);
+            return newClassDecl.ToFullString();
         }
         return member.ToFullString();
     }
@@ -634,11 +661,6 @@ public class MergeOptions
     /// Whether to fail if conflicts cannot be resolved.
     /// </summary>
     public bool FailOnUnresolvableConflicts { get; set; } = false;
-
-    /// <summary>
-    /// Maximum number of auto-fix iterations.
-    /// </summary>
-    public int MaxAutoFixIterations { get; set; } = 3;
 
     /// <summary>
     /// Whether to enable manual checkpoints for non-trivial conflicts.
