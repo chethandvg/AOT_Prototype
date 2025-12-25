@@ -12,6 +12,16 @@ public class DocumentationService
 {
     private readonly OpenAIService _openAIService;
     private readonly DocumentationConfig _config;
+    
+    /// <summary>
+    /// Number of characters to use from the hash for code identification.
+    /// </summary>
+    private const int CodeHashLength = 16;
+    
+    /// <summary>
+    /// Maximum number of validation errors to include in notes.
+    /// </summary>
+    private const int MaxValidationErrorsInNotes = 3;
 
     public DocumentationService(OpenAIService openAIService, DocumentationConfig? config = null)
     {
@@ -370,7 +380,7 @@ public class DocumentationService
         
         if (task.ValidationErrors.Any())
         {
-            return $"Validation issues: {string.Join("; ", task.ValidationErrors.Take(3))}";
+            return $"Validation issues: {string.Join("; ", task.ValidationErrors.Take(MaxValidationErrorsInNotes))}";
         }
         
         return "Pending validation";
@@ -385,7 +395,7 @@ public class DocumentationService
         
         var bytes = Encoding.UTF8.GetBytes(code);
         var hash = SHA256.HashData(bytes);
-        return Convert.ToHexString(hash)[..16]; // First 16 chars
+        return Convert.ToHexString(hash)[..CodeHashLength];
     }
 
     /// <summary>
