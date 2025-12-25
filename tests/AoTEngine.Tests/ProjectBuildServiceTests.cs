@@ -4,7 +4,16 @@ using Xunit;
 
 namespace AoTEngine.Tests;
 
-public class ProjectBuildServiceTests : IDisposable
+/// <summary>
+/// Tests for ProjectBuildService.
+/// This is the main partial class containing core tests for project creation.
+/// </summary>
+/// <remarks>
+/// This class is split into multiple partial class files for maintainability:
+/// - ProjectBuildServiceTests.cs (this file): Core tests and setup/teardown
+/// - ProjectBuildServiceTests.Validation.cs: Validation result conversion tests
+/// </remarks>
+public partial class ProjectBuildServiceTests : IDisposable
 {
     private readonly ProjectBuildService _buildService;
     private readonly string _testOutputDirectory;
@@ -232,87 +241,5 @@ public class LoggerService
         {
             // Cleanup handled by Dispose
         }
-    }
-
-    [Fact]
-    public async Task CreateProjectFromTasksAsync_WithEntryPoint_ShouldNotCreateDefaultProgram()
-    {
-        // Arrange
-        var tasks = new List<TaskNode>
-        {
-            new TaskNode
-            {
-                Id = "task1",
-                Description = "Create entry point",
-                Namespace = "MyApp",
-                ExpectedTypes = new List<string> { "Program" },
-                GeneratedCode = @"
-using System;
-
-namespace MyApp;
-
-public class Program
-{
-    public static void Main(string[] args)
-    {
-        Console.WriteLine(""Hello, World!"");
-    }
-}",
-                IsCompleted = true,
-                IsValidated = true
-            }
-        };
-
-        try
-        {
-            // Act
-            var result = await _buildService.CreateProjectFromTasksAsync(_testOutputDirectory, "TestAppWithMain", tasks);
-
-            // Assert
-            Assert.True(result.Success, $"Build failed: {result.ErrorMessage}");
-        }
-        finally
-        {
-            // Cleanup handled by Dispose
-        }
-    }
-
-    [Fact]
-    public void ConvertToValidationResult_WithSuccessfulBuild_ShouldReturnValid()
-    {
-        // Arrange
-        var buildResult = new ProjectBuildResult
-        {
-            Success = true,
-            Errors = new List<string>(),
-            Warnings = new List<string>()
-        };
-
-        // Act
-        var validationResult = _buildService.ConvertToValidationResult(buildResult);
-
-        // Assert
-        Assert.True(validationResult.IsValid);
-        Assert.Empty(validationResult.Errors);
-    }
-
-    [Fact]
-    public void ConvertToValidationResult_WithFailedBuild_ShouldReturnInvalid()
-    {
-        // Arrange
-        var buildResult = new ProjectBuildResult
-        {
-            Success = false,
-            Errors = new List<string> { "CS0001: Syntax error" },
-            Warnings = new List<string> { "CS0168: Variable declared but never used" }
-        };
-
-        // Act
-        var validationResult = _buildService.ConvertToValidationResult(buildResult);
-
-        // Assert
-        Assert.False(validationResult.IsValid);
-        Assert.NotEmpty(validationResult.Errors);
-        Assert.NotEmpty(validationResult.Warnings);
     }
 }
