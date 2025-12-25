@@ -10,7 +10,7 @@ public partial class AutoDecomposer
 {
     private readonly OpenAIService _openAIService;
     private readonly TaskComplexityAnalyzer _complexityAnalyzer;
-    private const int DefaultMaxLineThreshold = 100;
+    private const int DefaultMaxLineThreshold = 300;
 
     public AutoDecomposer(OpenAIService openAIService)
     {
@@ -117,17 +117,27 @@ public partial class AutoDecomposer
             return DecompositionType.PartialClass;
         }
 
+        // Check description for patterns - handle null safely
+        var description = task.Description;
+        if (string.IsNullOrEmpty(description))
+        {
+            // No description available; default to functional decomposition
+            return DecompositionType.Functional;
+        }
+
+        var descriptionLower = description.ToLowerInvariant();
+
         // Interface + implementation pattern detected
-        if (task.Description.ToLowerInvariant().Contains("interface") &&
-            task.Description.ToLowerInvariant().Contains("implementation"))
+        if (descriptionLower.Contains("interface") &&
+            descriptionLower.Contains("implementation"))
         {
             return DecompositionType.InterfaceBased;
         }
 
         // Complex service with multiple concerns -> Layer-based
-        if (task.Description.ToLowerInvariant().Contains("service") &&
-            (task.Description.ToLowerInvariant().Contains("validation") ||
-             task.Description.ToLowerInvariant().Contains("repository")))
+        if (descriptionLower.Contains("service") &&
+            (descriptionLower.Contains("validation") ||
+             descriptionLower.Contains("repository")))
         {
             return DecompositionType.LayerBased;
         }

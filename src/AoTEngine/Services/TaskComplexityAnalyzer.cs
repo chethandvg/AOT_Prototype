@@ -9,7 +9,7 @@ namespace AoTEngine.Services;
 /// </summary>
 public partial class TaskComplexityAnalyzer
 {
-    private const int DefaultMaxLineThreshold = 100;
+    private const int DefaultMaxLineThreshold = 300;
     private const int HighComplexityThreshold = 70;
     private const int MediumComplexityThreshold = 40;
 
@@ -19,25 +19,30 @@ public partial class TaskComplexityAnalyzer
     private const double MethodWeight = 0.25;
     private const double DescriptionWeight = 0.30;
 
-    // Keywords that indicate complexity in task descriptions
+    // Keywords that indicate complexity in task descriptions (lowercase for direct comparison)
     private static readonly string[] ComplexityKeywords = new[]
     {
         "complex", "comprehensive", "full", "complete", "advanced",
         "implement", "integration", "multiple", "various", "all",
-        "CRUD", "API", "service", "repository", "controller",
+        "crud", "api", "service", "repository", "controller",
         "authentication", "authorization", "validation", "caching"
     };
 
-    // Patterns that suggest multi-method implementations
-    private static readonly string[] MethodIndicatorPatterns = new[]
+    // Compiled regex patterns for multi-method implementations (performance optimization)
+    private static readonly Regex[] MethodIndicatorRegexes = new[]
     {
-        @"create\s+\w+\s+methods?",
-        @"implement\s+\w+\s+operations?",
-        @"add\s+\w+\s+functionality",
-        @"CRUD\s+operations?",
-        @"get\s+set\s+update\s+delete",
-        @"async\s+methods?"
+        new Regex(@"create\s+\w+\s+methods?", RegexOptions.IgnoreCase | RegexOptions.Compiled),
+        new Regex(@"implement\s+\w+\s+operations?", RegexOptions.IgnoreCase | RegexOptions.Compiled),
+        new Regex(@"add\s+\w+\s+functionality", RegexOptions.IgnoreCase | RegexOptions.Compiled),
+        new Regex(@"CRUD\s+operations?", RegexOptions.IgnoreCase | RegexOptions.Compiled),
+        new Regex(@"get\s+set\s+update\s+delete", RegexOptions.IgnoreCase | RegexOptions.Compiled),
+        new Regex(@"async\s+methods?", RegexOptions.IgnoreCase | RegexOptions.Compiled)
     };
+
+    // Compiled regex for type pattern matching (performance optimization)
+    private static readonly Regex TypePatternRegex = new Regex(
+        @"(class|interface|enum|record).*and.*(class|interface|enum|record)",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
     /// <summary>
     /// Analyzes a task to determine its complexity metrics.
@@ -136,7 +141,7 @@ public partial class TaskComplexityAnalyzer
     /// <summary>
     /// Estimates type count from task description.
     /// </summary>
-    private int EstimateTypeCountFromDescription(string description)
+    private int EstimateTypeCountFromDescription(string? description)
     {
         if (string.IsNullOrWhiteSpace(description))
             return 1;
@@ -144,8 +149,8 @@ public partial class TaskComplexityAnalyzer
         var lowerDesc = description.ToLowerInvariant();
         var count = 1;
 
-        // Check for patterns indicating multiple types
-        if (Regex.IsMatch(lowerDesc, @"(class|interface|enum|record).*and.*(class|interface|enum|record)"))
+        // Check for patterns indicating multiple types using compiled regex
+        if (TypePatternRegex.IsMatch(lowerDesc))
             count += 2;
         if (lowerDesc.Contains("model") && lowerDesc.Contains("service"))
             count += 1;

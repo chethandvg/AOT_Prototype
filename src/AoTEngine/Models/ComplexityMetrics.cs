@@ -43,9 +43,10 @@ public class ComplexityMetrics
     public int RecommendedSubtaskCount { get; set; }
 
     /// <summary>
-    /// Maximum line count threshold for code generation (default: 100).
+    /// Maximum line count threshold for code generation (default: 300).
+    /// Tasks exceeding this threshold will be automatically decomposed into smaller subtasks.
     /// </summary>
-    public int MaxLineThreshold { get; set; } = 100;
+    public int MaxLineThreshold { get; set; } = 300;
 
     /// <summary>
     /// Confidence level of the complexity estimation (0.0 to 1.0).

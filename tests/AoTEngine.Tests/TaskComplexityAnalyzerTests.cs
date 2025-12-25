@@ -96,9 +96,7 @@ public class TaskComplexityAnalyzerTests
         // Assert
         Assert.Equal(4, metrics.DependencyCount);
         Assert.True(metrics.Breakdown!.DependencyComplexity > 0);
-#pragma warning disable xUnit2012 // Using partial match for substring
         Assert.True(metrics.Breakdown.ContributingFactors.Any(f => f.Contains("Multiple dependencies")));
-#pragma warning restore xUnit2012
     }
 
     [Fact]

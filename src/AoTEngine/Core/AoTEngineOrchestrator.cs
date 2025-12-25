@@ -15,7 +15,7 @@ public class AoTEngineOrchestrator
     private readonly CodeValidatorService _validatorService;
     private readonly DocumentationService? _documentationService;
     private readonly DocumentationConfig? _documentationConfig;
-    private const int DefaultMaxLineThreshold = 100;
+    private const int DefaultMaxLineThreshold = 300;
 
     public AoTEngineOrchestrator(
         OpenAIService openAIService,
@@ -43,7 +43,7 @@ public class AoTEngineOrchestrator
     /// <param name="useBatchValidation">Whether to use batch validation mode.</param>
     /// <param name="useHybridValidation">Whether to use hybrid validation mode.</param>
     /// <param name="outputDirectory">Output directory for generated code.</param>
-    /// <param name="maxLinesPerTask">Maximum lines per generated task (default: 100). Tasks exceeding this will be decomposed.</param>
+    /// <param name="maxLinesPerTask">Maximum lines per generated task (default: 300). Tasks exceeding this will be decomposed.</param>
     /// <param name="enableComplexityAnalysis">Whether to enable complexity analysis and automatic decomposition.</param>
     public async Task<AoTResult> ExecuteAsync(
         string userRequest, 

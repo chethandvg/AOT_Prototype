@@ -23,7 +23,8 @@ public partial class TaskComplexityAnalyzer
         }
 
         // Check for async patterns which add complexity
-        if (task.Description.ToLowerInvariant().Contains("async"))
+        if (!string.IsNullOrEmpty(task.Description) &&
+            task.Description.IndexOf("async", StringComparison.OrdinalIgnoreCase) >= 0)
         {
             score = Math.Min(25, score + 3);
             factors.Add("Asynchronous operations required");
@@ -43,9 +44,9 @@ public partial class TaskComplexityAnalyzer
         var lowerDesc = task.Description.ToLowerInvariant();
         var score = 0;
 
-        // Check for complexity keywords
+        // Check for complexity keywords (keywords are already lowercase)
         var matchedKeywords = ComplexityKeywords
-            .Where(k => lowerDesc.Contains(k.ToLowerInvariant()))
+            .Where(k => lowerDesc.Contains(k))
             .ToList();
 
         score += Math.Min(15, matchedKeywords.Count * 3);
@@ -82,13 +83,10 @@ public partial class TaskComplexityAnalyzer
         var lowerDesc = task.Description.ToLowerInvariant();
         var count = 1; // At least one method
 
-        // Check for method indicator patterns
-        foreach (var pattern in MethodIndicatorPatterns)
+        // Check for method indicator patterns using compiled regexes
+        foreach (var regex in MethodIndicatorRegexes.Where(r => r.IsMatch(lowerDesc)))
         {
-            if (Regex.IsMatch(lowerDesc, pattern, RegexOptions.IgnoreCase))
-            {
-                count += 2;
-            }
+            count += 2;
         }
 
         // CRUD operations typically mean 4+ methods

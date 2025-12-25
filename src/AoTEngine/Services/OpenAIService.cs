@@ -1000,23 +1000,29 @@ Return a concise markdown-formatted summary.";
         }
     }
 
+    // Safety margin for line count estimation (accounts for overhead like using statements, namespace declarations)
+    private const int LineCountSafetyMargin = 10;
+
     /// <summary>
     /// Decomposes a complex task into smaller subtasks using OpenAI.
     /// Used when a task is estimated to generate more than the allowed line count.
     /// </summary>
     /// <param name="task">The task to decompose.</param>
     /// <param name="targetSubtaskCount">Number of subtasks to create.</param>
-    /// <param name="maxLinesPerSubtask">Maximum lines per subtask.</param>
+    /// <param name="maxLinesPerSubtask">Maximum lines per subtask (default: 300).</param>
     /// <returns>List of decomposed subtasks.</returns>
     public async Task<List<TaskNode>> DecomposeComplexTaskAsync(
         TaskNode task,
         int targetSubtaskCount,
-        int maxLinesPerSubtask = 100)
+        int maxLinesPerSubtask = 300)
     {
+        // Subtract safety margin to account for using statements, namespace declarations, and other overhead
+        var effectiveMaxLines = maxLinesPerSubtask - LineCountSafetyMargin;
+        
         var systemPrompt = $@"You are an expert C# software architect. Decompose the given task into {targetSubtaskCount} smaller subtasks.
 
 CRITICAL REQUIREMENTS:
-1. Each subtask must generate NO MORE than {maxLinesPerSubtask - 10} lines of code
+1. Each subtask must generate NO MORE than {effectiveMaxLines} lines of code
 2. Subtasks must be independently compilable
 3. Use partial classes if splitting a single large class
 4. Maintain proper dependencies between subtasks (no circular dependencies)
@@ -1089,14 +1095,12 @@ Return ONLY valid JSON.";
                 if (response?.Tasks != null && response.Tasks.Any())
                 {
                     // Inherit original task's dependencies to first subtask
-                    if (response.Tasks.Count > 0 && task.Dependencies.Any())
+                    if (response.Tasks.Count > 0 && task.Dependencies != null && task.Dependencies.Any())
                     {
-                        foreach (var dep in task.Dependencies)
+                        response.Tasks[0].Dependencies ??= new List<string>();
+                        foreach (var dep in task.Dependencies.Where(d => !response.Tasks[0].Dependencies.Contains(d)))
                         {
-                            if (!response.Tasks[0].Dependencies.Contains(dep))
-                            {
-                                response.Tasks[0].Dependencies.Add(dep);
-                            }
+                            response.Tasks[0].Dependencies.Add(dep);
                         }
                     }
                     return response.Tasks;
@@ -1107,14 +1111,12 @@ Return ONLY valid JSON.";
                 if (altResponse?.Subtasks != null && altResponse.Subtasks.Any())
                 {
                     // Inherit original task's dependencies to first subtask
-                    if (altResponse.Subtasks.Count > 0 && task.Dependencies.Any())
+                    if (altResponse.Subtasks.Count > 0 && task.Dependencies != null && task.Dependencies.Any())
                     {
-                        foreach (var dep in task.Dependencies)
+                        altResponse.Subtasks[0].Dependencies ??= new List<string>();
+                        foreach (var dep in task.Dependencies.Where(d => !altResponse.Subtasks[0].Dependencies.Contains(d)))
                         {
-                            if (!altResponse.Subtasks[0].Dependencies.Contains(dep))
-                            {
-                                altResponse.Subtasks[0].Dependencies.Add(dep);
-                            }
+                            altResponse.Subtasks[0].Dependencies.Add(dep);
                         }
                     }
                     return altResponse.Subtasks;

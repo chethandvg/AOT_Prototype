@@ -17,7 +17,7 @@ public class ParallelExecutionEngine
     private readonly TaskComplexityAnalyzer _complexityAnalyzer;
     private readonly string? _outputDirectory;
     private const int MaxRetries = 3;
-    private const int DefaultMaxLineThreshold = 100;
+    private const int DefaultMaxLineThreshold = 300;
 
     public ParallelExecutionEngine(
         OpenAIService openAIService, 
@@ -41,7 +41,7 @@ public class ParallelExecutionEngine
     /// Ensures no task will generate more than the specified line threshold.
     /// </summary>
     /// <param name="tasks">List of tasks to analyze.</param>
-    /// <param name="maxLineThreshold">Maximum lines per task (default: 100).</param>
+    /// <param name="maxLineThreshold">Maximum lines per task (default: 300).</param>
     /// <returns>Modified task list with complex tasks decomposed.</returns>
     public async Task<List<TaskNode>> AnalyzeAndDecomposeComplexTasksAsync(
         List<TaskNode> tasks,
@@ -119,7 +119,7 @@ public class ParallelExecutionEngine
             else
             {
                 // Update dependencies that reference the original task
-                if (task.Dependencies.Contains(originalTask.Id))
+                if (task.Dependencies != null && task.Dependencies.Contains(originalTask.Id))
                 {
                     task.Dependencies.Remove(originalTask.Id);
                     // Depend on the last subtask instead

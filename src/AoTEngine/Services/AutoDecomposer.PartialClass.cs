@@ -9,6 +9,16 @@ namespace AoTEngine.Services;
 /// </summary>
 public partial class AutoDecomposer
 {
+    // Compiled regex for class name extraction (performance optimization)
+    private static readonly Regex ClassNameRegex = new Regex(
+        @"class\s+(\w+)|implement\s+(\w+)|create\s+(\w+)Service",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+    // Compiled regex for interface pattern matching (performance optimization)
+    private static readonly Regex InterfacePatternRegex = new Regex(
+        @"^I[A-Z]",
+        RegexOptions.Compiled);
+
     /// <summary>
     /// Processes and validates subtasks from OpenAI.
     /// </summary>
@@ -35,22 +45,22 @@ public partial class AutoDecomposer
                 subtask.Namespace = originalTask.Namespace;
             }
 
+            // Initialize dependencies if null
+            subtask.Dependencies ??= new List<string>();
+
             // Set up dependencies correctly
-            if (i > 0 && !subtask.Dependencies.Contains(subtasks[i - 1].Id))
+            if (i > 0 && subtasks[i - 1].Id != null && !subtask.Dependencies.Contains(subtasks[i - 1].Id))
             {
                 // Each part depends on previous part for partial classes
                 subtask.Dependencies.Add(subtasks[i - 1].Id);
             }
 
             // Inherit original task's dependencies for first subtask
-            if (i == 0 && originalTask.Dependencies.Any())
+            if (i == 0 && originalTask.Dependencies != null && originalTask.Dependencies.Any())
             {
-                foreach (var dep in originalTask.Dependencies)
+                foreach (var dep in originalTask.Dependencies.Where(d => !subtask.Dependencies.Contains(d)))
                 {
-                    if (!subtask.Dependencies.Contains(dep))
-                    {
-                        subtask.Dependencies.Add(dep);
-                    }
+                    subtask.Dependencies.Add(dep);
                 }
             }
 
@@ -74,6 +84,9 @@ public partial class AutoDecomposer
     /// </summary>
     private bool HasCircularDependency(TaskNode task, List<TaskNode> existingTasks)
     {
+        if (task.Dependencies == null || !task.Dependencies.Any())
+            return false;
+
         var visited = new HashSet<string>();
         var recursionStack = new HashSet<string>();
 
@@ -88,12 +101,11 @@ public partial class AutoDecomposer
             recursionStack.Add(taskId);
 
             var taskToCheck = existingTasks.FirstOrDefault(t => t.Id == taskId);
-            if (taskToCheck != null)
+            if (taskToCheck?.Dependencies != null)
             {
-                foreach (var dep in taskToCheck.Dependencies)
+                foreach (var dep in taskToCheck.Dependencies.Where(d => HasCycle(d)))
                 {
-                    if (HasCycle(dep))
-                        return true;
+                    return true;
                 }
             }
 
@@ -129,22 +141,19 @@ public partial class AutoDecomposer
         }
         else
         {
-            // Extract from description
-            var classMatch = Regex.Match(
-                originalTask.Description,
-                @"class\s+(\w+)|implement\s+(\w+)|create\s+(\w+)Service",
-                RegexOptions.IgnoreCase);
+            // Default to a generated class name; override if we find a match
+            config.BaseClassName = "GeneratedClass";
+
+            // Extract from description using compiled regex
+            var description = originalTask.Description ?? string.Empty;
+            var classMatch = ClassNameRegex.Match(description);
             
             if (classMatch.Success)
             {
                 config.BaseClassName = classMatch.Groups
                     .Cast<Group>()
                     .Skip(1)
-                    .FirstOrDefault(g => g.Success)?.Value ?? "GeneratedClass";
-            }
-            else
-            {
-                config.BaseClassName = "GeneratedClass";
+                    .FirstOrDefault(g => g.Success)?.Value ?? config.BaseClassName;
             }
         }
 
@@ -182,16 +191,16 @@ public partial class AutoDecomposer
             .SelectMany(s => s.ExpectedTypes)
             .ToList();
 
-        // Find interfaces (types starting with 'I' followed by uppercase)
+        // Find interfaces (types starting with 'I' followed by uppercase) using compiled regex
         var interfaces = allExpectedTypes
-            .Where(t => Regex.IsMatch(t, @"^I[A-Z]"))
+            .Where(t => InterfacePatternRegex.IsMatch(t))
             .Distinct()
             .ToList();
 
         sharedState.SharedInterfaces.AddRange(interfaces);
 
-        // Common constructor parameters based on task description
-        var lowerDesc = originalTask.Description.ToLowerInvariant();
+        // Common constructor parameters based on task description - handle null safely
+        var lowerDesc = (originalTask.Description ?? string.Empty).ToLowerInvariant();
         
         if (lowerDesc.Contains("logging") || lowerDesc.Contains("logger"))
         {
@@ -257,7 +266,7 @@ public partial class AutoDecomposer
             else
             {
                 // Update dependencies that reference the original task
-                if (task.Dependencies.Contains(originalTask.Id))
+                if (task.Dependencies != null && task.Dependencies.Contains(originalTask.Id))
                 {
                     task.Dependencies.Remove(originalTask.Id);
                     // Depend on the last subtask instead
