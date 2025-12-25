@@ -124,17 +124,13 @@ public class SymbolTable
         else if (simpleNameSymbols.Any())
         {
             // Collision detected - same simple name in different namespaces
-            foreach (var existingFqn in simpleNameSymbols)
+            _collisions.AddRange(simpleNameSymbols.Select(existingFqn => new SymbolCollision
             {
-                var existing = _symbols[existingFqn];
-                _collisions.Add(new SymbolCollision
-                {
-                    SimpleName = symbol.Name,
-                    ExistingSymbol = existing,
-                    NewSymbol = symbol,
-                    CollisionType = DetermineCollisionType(existing, symbol)
-                });
-            }
+                SimpleName = symbol.Name,
+                ExistingSymbol = _symbols[existingFqn],
+                NewSymbol = symbol,
+                CollisionType = DetermineCollisionType(_symbols[existingFqn], symbol)
+            }));
         }
         simpleNameSymbols.Add(symbol.FullyQualifiedName);
 
@@ -167,13 +163,23 @@ public class SymbolTable
     /// </summary>
     private bool IsModelType(ProjectSymbolInfo symbol)
     {
-        // Simple heuristic: types with "Info", "Data", "Dto", "Model" suffix
-        // or types that are not interfaces
+        // Heuristic: non-interface types with a model-like suffix.
+        // We treat service-specific Request/Response types in Services namespaces
+        // as non-models to avoid flagging legitimate service DTOs as misplaced.
         var name = symbol.Name;
+
+        // Do not treat service-layer Request/Response types as models.
+        if (symbol.Namespace.Contains(".Services") &&
+            (name.EndsWith("Request") || name.EndsWith("Response")))
+        {
+            return false;
+        }
+
         return symbol.Kind != ProjectSymbolKind.Interface &&
-               (name.EndsWith("Info") || name.EndsWith("Data") || 
-                name.EndsWith("Dto") || name.EndsWith("Model") ||
-                name.EndsWith("Request") || name.EndsWith("Response"));
+               (name.EndsWith("Info") ||
+                name.EndsWith("Data") ||
+                name.EndsWith("Dto") ||
+                name.EndsWith("Model"));
     }
 
     /// <summary>

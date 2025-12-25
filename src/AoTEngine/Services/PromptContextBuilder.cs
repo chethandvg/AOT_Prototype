@@ -268,15 +268,10 @@ FAILURE TO FOLLOW THESE RULES WILL RESULT IN COMPILATION ERRORS.";
         }
 
         // Contract is consumed from dependencies
-        if (task.ConsumedTypes != null)
+        if (task.ConsumedTypes != null &&
+            task.ConsumedTypes.Values.Any(consumedList => consumedList.Contains(contract.Name)))
         {
-            foreach (var consumedList in task.ConsumedTypes.Values)
-            {
-                if (consumedList.Contains(contract.Name))
-                {
-                    return true;
-                }
-            }
+            return true;
         }
 
         // Check if contract type is mentioned in task description
@@ -296,17 +291,11 @@ FAILURE TO FOLLOW THESE RULES WILL RESULT IN COMPILATION ERRORS.";
         var warnings = new List<string>();
 
         // Check for ambiguous type names in the registry
-        if (task.ExpectedTypes.Any())
+        foreach (var typeName in task.ExpectedTypes.Where(t => _typeRegistry.IsAmbiguous(t)))
         {
-            foreach (var typeName in task.ExpectedTypes)
-            {
-                if (_typeRegistry.IsAmbiguous(typeName))
-                {
-                    var matches = _typeRegistry.GetTypesBySimpleName(typeName);
-                    warnings.Add($"WARNING: '{typeName}' exists in multiple namespaces: {string.Join(", ", matches.Select(m => m.FullyQualifiedName))}");
-                    warnings.Add($"  → Use fully qualified name to avoid ambiguity");
-                }
-            }
+            var matches = _typeRegistry.GetTypesBySimpleName(typeName);
+            warnings.Add($"WARNING: '{typeName}' exists in multiple namespaces: {string.Join(", ", matches.Select(m => m.FullyQualifiedName))}");
+            warnings.Add($"  → Use fully qualified name to avoid ambiguity");
         }
 
         if (!warnings.Any())
@@ -449,6 +438,12 @@ FAILURE TO FOLLOW THESE RULES WILL RESULT IN COMPILATION ERRORS.";
         // Check for redefined types
         foreach (var contract in _contractCatalog.GetAllContracts())
         {
+            // Skip if the contract is in the expected types
+            if (task.ExpectedTypes.Contains(contract.Name))
+            {
+                continue;
+            }
+
             // Simple check - look for type definition patterns
             var patterns = new[]
             {
@@ -459,13 +454,10 @@ FAILURE TO FOLLOW THESE RULES WILL RESULT IN COMPILATION ERRORS.";
                 $"struct {contract.Name}"
             };
 
-            foreach (var pattern in patterns)
+            // Add error only once per contract if any pattern matches
+            if (patterns.Any(p => generatedCode.Contains(p)))
             {
-                if (generatedCode.Contains(pattern) && 
-                    !task.ExpectedTypes.Contains(contract.Name))
-                {
-                    errors.Add($"ERROR: Code redefines frozen contract type '{contract.Name}'. Use the existing definition from {contract.FullyQualifiedName}.");
-                }
+                errors.Add($"ERROR: Code redefines frozen contract type '{contract.Name}'. Use the existing definition from {contract.FullyQualifiedName}.");
             }
         }
 

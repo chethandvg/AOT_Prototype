@@ -136,11 +136,8 @@ public class AtomCompilationService
             }
 
             // Classify diagnostics
-            foreach (var diagnostic in diagnostics)
-            {
-                var classified = ClassifyDiagnostic(diagnostic, code);
-                result.ClassifiedDiagnostics.Add(classified);
-            }
+            result.ClassifiedDiagnostics.AddRange(
+                diagnostics.Select(diagnostic => ClassifyDiagnostic(diagnostic, code)));
 
             result.Success = false;
         }
@@ -279,15 +276,7 @@ public class AtomCompilationService
             return false;
         }
 
-        foreach (var enumContract in _contractCatalog.Enums)
-        {
-            if (message.Contains(enumContract.Name))
-            {
-                return true;
-            }
-        }
-
-        return false;
+        return _contractCatalog.Enums.Any(enumContract => message.Contains(enumContract.Name));
     }
 
     /// <summary>
@@ -366,18 +355,15 @@ public class AtomCompilationService
             var enumContract = _contractCatalog.Enums.FirstOrDefault(e => 
                 e.Name == expression || e.FullyQualifiedName == expression);
 
-            if (enumContract != null)
+            if (enumContract != null && !enumContract.Members.Any(m => m.Name == memberName))
             {
-                if (!enumContract.Members.Any(m => m.Name == memberName))
+                violations.Add(new ContractViolation
                 {
-                    violations.Add(new ContractViolation
-                    {
-                        ViolationType = ContractViolationType.InvalidEnumMember,
-                        TypeName = enumContract.Name,
-                        Message = $"Enum member '{memberName}' does not exist in '{enumContract.Name}'. Valid members: {string.Join(", ", enumContract.Members.Select(m => m.Name))}",
-                        Location = memberAccess.GetLocation()
-                    });
-                }
+                    ViolationType = ContractViolationType.InvalidEnumMember,
+                    TypeName = enumContract.Name,
+                    Message = $"Enum member '{memberName}' does not exist in '{enumContract.Name}'. Valid members: {string.Join(", ", enumContract.Members.Select(m => m.Name))}",
+                    Location = memberAccess.GetLocation()
+                });
             }
         }
 

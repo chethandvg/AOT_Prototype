@@ -338,8 +338,37 @@ public class AutoFixService
             newClassDecl = classDecl.WithBaseList(newBaseList);
         }
 
-        // Add composition field
-        var fieldName = $"_{char.ToLower(sealedTypeName[0])}{sealedTypeName.Substring(1)}";
+        // Add composition field with safe field name generation
+        string fieldName;
+        if (string.IsNullOrWhiteSpace(sealedTypeName))
+        {
+            fieldName = "_sealedInstance";
+        }
+        else
+        {
+            var fieldNameBuilder = new StringBuilder();
+            foreach (var ch in sealedTypeName)
+            {
+                if (!SyntaxFacts.IsIdentifierPartCharacter(ch))
+                {
+                    continue;
+                }
+
+                if (fieldNameBuilder.Length == 0)
+                {
+                    fieldNameBuilder.Append(char.ToLowerInvariant(ch));
+                }
+                else
+                {
+                    fieldNameBuilder.Append(ch);
+                }
+            }
+
+            fieldName = fieldNameBuilder.Length == 0 
+                ? "_sealedInstance" 
+                : "_" + fieldNameBuilder.ToString();
+        }
+        
         var field = SyntaxFactory.FieldDeclaration(
             SyntaxFactory.VariableDeclaration(
                 SyntaxFactory.ParseTypeName(sealedClass))

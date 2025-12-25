@@ -1,5 +1,6 @@
 using AoTEngine.Models;
 using OpenAI.Chat;
+using System.Text;
 
 namespace AoTEngine.Services;
 
@@ -41,15 +42,16 @@ public partial class OpenAIService
             return await GenerateCodeAsync(task, completedTasks);
         }
 
-        // Build enhanced context with contracts
-        var enhancedContext = _promptContextBuilder.BuildCodeGenerationContext(task, completedTasks);
+        // Build enhanced context with contracts using StringBuilder for efficiency
+        var enhancedContextBuilder = new StringBuilder();
+        enhancedContextBuilder.Append(_promptContextBuilder.BuildCodeGenerationContext(task, completedTasks));
 
         for (int attempt = 0; attempt < MaxRetries; attempt++)
         {
             try
             {
                 var systemPrompt = GetContractAwareSystemPrompt(attempt);
-                var userPrompt = GetContractAwareUserPrompt(enhancedContext, attempt, task);
+                var userPrompt = GetContractAwareUserPrompt(enhancedContextBuilder.ToString(), attempt, task);
 
                 var messages = new List<ChatMessage>
                 {
@@ -86,7 +88,13 @@ public partial class OpenAIService
                     if (attempt < MaxRetries - 1)
                     {
                         Console.WriteLine("   Regenerating with contract violation feedback...");
-                        enhancedContext += $"\n\n/* CONTRACT VIOLATIONS TO FIX:\n{string.Join("\n", contractViolations)}\n*/";
+                        enhancedContextBuilder.AppendLine();
+                        enhancedContextBuilder.AppendLine("/* CONTRACT VIOLATIONS TO FIX:");
+                        foreach (var violation in contractViolations)
+                        {
+                            enhancedContextBuilder.AppendLine(violation);
+                        }
+                        enhancedContextBuilder.AppendLine("*/");
                         continue;
                     }
                 }

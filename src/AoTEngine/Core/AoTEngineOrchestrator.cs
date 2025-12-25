@@ -336,8 +336,18 @@ public class AoTEngineOrchestrator
             
             if (match.Success && match.Groups.Count > 1)
             {
-                var name = match.Groups[1].Value;
+                var name = match.Groups[1].Value?.Trim();
+                if (string.IsNullOrEmpty(name))
+                {
+                    // If we couldn't extract a valid name from this pattern, try the next one
+                    continue;
+                }
+
                 // Clean up and capitalize
+                if (name.Length == 1)
+                {
+                    return char.ToUpper(name[0]).ToString();
+                }
                 return char.ToUpper(name[0]) + name.Substring(1);
             }
         }

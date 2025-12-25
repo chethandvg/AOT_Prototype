@@ -294,10 +294,11 @@ public class ContractCatalogTests
     }
 
     [Fact]
-    public void AbstractClassContract_GenerateCode_WhenSealed_IncludesSealedKeyword()
+    public void AbstractClassContract_GenerateCode_WhenSealed_GeneratesSealedClass()
     {
-        // Arrange
-        var abstractContract = new AbstractClassContract
+        // Arrange - A class cannot be both sealed and abstract in C#
+        // When IsSealed is true, it generates a sealed class (not abstract)
+        var contract = new AbstractClassContract
         {
             Name = "FinalResponse",
             Namespace = "TestProject.Models",
@@ -305,10 +306,11 @@ public class ContractCatalogTests
         };
 
         // Act
-        var code = abstractContract.GenerateCode();
+        var code = contract.GenerateCode();
 
-        // Assert
-        Assert.Contains("public sealed abstract class FinalResponse", code);
+        // Assert - should be sealed class, not sealed abstract class
+        Assert.Contains("public sealed class FinalResponse", code);
+        Assert.DoesNotContain("abstract", code);
     }
 }
 

@@ -264,9 +264,12 @@ public class InterfaceContract : BaseContract
         sb.AppendLine($"{AccessModifier} interface {Name}{typeParams}{baseList}");
         
         // Add type constraints
-        foreach (var (typeParam, constraints) in TypeConstraints)
+        if (TypeConstraints != null)
         {
-            sb.AppendLine($"    where {typeParam} : {string.Join(", ", constraints)}");
+            foreach (var (typeParam, constraints) in TypeConstraints)
+            {
+                sb.AppendLine($"    where {typeParam} : {string.Join(", ", constraints)}");
+            }
         }
         
         sb.AppendLine("{");
@@ -529,7 +532,9 @@ public class AbstractClassContract : BaseContract
             sb.AppendLine($"/// </summary>");
         }
         
-        var sealedKeyword = IsSealed ? "sealed " : "";
+        // A class cannot be both sealed and abstract in C#
+        // If sealed, we generate a sealed class; otherwise abstract
+        var classKeyword = IsSealed ? "sealed class" : "abstract class";
         var typeParams = TypeParameters.Any() ? $"<{string.Join(", ", TypeParameters)}>" : "";
         
         var baseList = new List<string>();
@@ -537,7 +542,7 @@ public class AbstractClassContract : BaseContract
         baseList.AddRange(ImplementedInterfaces);
         var inheritance = baseList.Any() ? $" : {string.Join(", ", baseList)}" : "";
         
-        sb.AppendLine($"{AccessModifier} {sealedKeyword}abstract class {Name}{typeParams}{inheritance}");
+        sb.AppendLine($"{AccessModifier} {classKeyword} {Name}{typeParams}{inheritance}");
         sb.AppendLine("{");
         
         foreach (var prop in Properties)
