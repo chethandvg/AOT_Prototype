@@ -39,6 +39,15 @@ public class DocumentationService
         TaskNode task, 
         Dictionary<string, TaskNode> dependencyTasks)
     {
+        ArgumentNullException.ThrowIfNull(task);
+        dependencyTasks ??= new Dictionary<string, TaskNode>();
+        
+        // Skip LLM call if no generated code exists
+        if (string.IsNullOrWhiteSpace(task.GeneratedCode))
+        {
+            return CreateMinimalSummaryRecord(task);
+        }
+        
         if (!_config.Enabled || !_config.GeneratePerTask)
         {
             return CreateMinimalSummaryRecord(task);
@@ -100,6 +109,17 @@ public class DocumentationService
         string originalRequest,
         string description)
     {
+        // Input validation
+        if (tasks == null || tasks.Count == 0)
+        {
+            return new ProjectDocumentation
+            {
+                ProjectRequest = originalRequest ?? string.Empty,
+                Description = description ?? string.Empty,
+                GeneratedAtUtc = DateTime.UtcNow
+            };
+        }
+        
         var doc = new ProjectDocumentation
         {
             ProjectRequest = originalRequest,
@@ -157,68 +177,108 @@ public class DocumentationService
     /// <summary>
     /// Exports project documentation to JSON format.
     /// </summary>
+    /// <param name="doc">The project documentation to export.</param>
+    /// <param name="path">The file path to write to.</param>
+    /// <exception cref="IOException">Thrown when the file cannot be written.</exception>
     public async Task ExportJsonAsync(ProjectDocumentation doc, string path)
     {
         if (!_config.ExportJson) return;
+        ArgumentNullException.ThrowIfNull(doc);
+        ArgumentException.ThrowIfNullOrWhiteSpace(path);
 
-        var json = JsonConvert.SerializeObject(doc, Formatting.Indented);
-        await File.WriteAllTextAsync(path, json);
-        Console.WriteLine($"   📄 Exported JSON documentation to: {path}");
+        try
+        {
+            var json = JsonConvert.SerializeObject(doc, Formatting.Indented);
+            await File.WriteAllTextAsync(path, json);
+            Console.WriteLine($"   📄 Exported JSON documentation to: {path}");
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or DirectoryNotFoundException)
+        {
+            Console.WriteLine($"   ⚠️  Failed to export JSON documentation to {path}: {ex.Message}");
+            throw;
+        }
     }
 
     /// <summary>
     /// Exports project documentation to Markdown format.
     /// </summary>
+    /// <param name="doc">The project documentation to export.</param>
+    /// <param name="path">The file path to write to.</param>
+    /// <exception cref="IOException">Thrown when the file cannot be written.</exception>
     public async Task ExportMarkdownAsync(ProjectDocumentation doc, string path)
     {
         if (!_config.ExportMarkdown) return;
+        ArgumentNullException.ThrowIfNull(doc);
+        ArgumentException.ThrowIfNullOrWhiteSpace(path);
 
-        var markdown = GenerateMarkdown(doc);
-        await File.WriteAllTextAsync(path, markdown);
-        Console.WriteLine($"   📄 Exported Markdown documentation to: {path}");
+        try
+        {
+            var markdown = GenerateMarkdown(doc);
+            await File.WriteAllTextAsync(path, markdown);
+            Console.WriteLine($"   📄 Exported Markdown documentation to: {path}");
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or DirectoryNotFoundException)
+        {
+            Console.WriteLine($"   ⚠️  Failed to export Markdown documentation to {path}: {ex.Message}");
+            throw;
+        }
     }
 
     /// <summary>
     /// Exports training dataset in JSONL format (one line per task).
     /// </summary>
+    /// <param name="doc">The project documentation to export.</param>
+    /// <param name="path">The file path to write to.</param>
+    /// <exception cref="IOException">Thrown when the file cannot be written.</exception>
     public async Task ExportJsonlDatasetAsync(ProjectDocumentation doc, string path)
     {
         if (!_config.ExportJsonl) return;
+        ArgumentNullException.ThrowIfNull(doc);
+        ArgumentException.ThrowIfNullOrWhiteSpace(path);
 
-        var sb = new StringBuilder();
-        
-        foreach (var record in doc.TaskRecords)
+        try
         {
-            var trainingRecord = new
-            {
-                instruction = $"Generate C# code for: {record.TaskDescription}",
-                input = new
-                {
-                    task_description = record.TaskDescription,
-                    dependencies = record.Dependencies,
-                    expected_types = record.ExpectedTypes,
-                    @namespace = record.Namespace,
-                    context = doc.ProjectRequest
-                },
-                output = record.GeneratedCode,
-                metadata = new
-                {
-                    task_id = record.TaskId,
-                    purpose = record.Purpose,
-                    key_behaviors = record.KeyBehaviors,
-                    edge_cases = record.EdgeCases,
-                    validation_notes = record.ValidationNotes,
-                    model_used = record.SummaryModel,
-                    timestamp = record.CreatedUtc.ToString("o"),
-                    code_hash = record.GeneratedCodeHash
-                }
-            };
+            // Stream JSONL lines directly to file for memory efficiency
+            using var stream = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.None, 4096, useAsync: true);
+            using var writer = new StreamWriter(stream, Encoding.UTF8);
             
-            sb.AppendLine(JsonConvert.SerializeObject(trainingRecord, Formatting.None));
+            foreach (var record in doc.TaskRecords)
+            {
+                var trainingRecord = new
+                {
+                    instruction = $"Generate C# code for: {record.TaskDescription}",
+                    input = new
+                    {
+                        task_description = record.TaskDescription,
+                        dependencies = record.Dependencies,
+                        expected_types = record.ExpectedTypes,
+                        @namespace = record.Namespace,
+                        context = doc.ProjectRequest
+                    },
+                    output = record.GeneratedCode,
+                    metadata = new
+                    {
+                        task_id = record.TaskId,
+                        purpose = record.Purpose,
+                        key_behaviors = record.KeyBehaviors,
+                        edge_cases = record.EdgeCases,
+                        validation_notes = record.ValidationNotes,
+                        model_used = record.SummaryModel,
+                        timestamp = record.CreatedUtc.ToString("o"),
+                        code_hash = record.GeneratedCodeHash
+                    }
+                };
+                
+                await writer.WriteLineAsync(JsonConvert.SerializeObject(trainingRecord, Formatting.None));
+            }
+            
+            Console.WriteLine($"   📄 Exported JSONL training dataset to: {path}");
         }
-
-        await File.WriteAllTextAsync(path, sb.ToString());
-        Console.WriteLine($"   📄 Exported JSONL training dataset to: {path}");
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or DirectoryNotFoundException)
+        {
+            Console.WriteLine($"   ⚠️  Failed to export JSONL dataset to {path}: {ex.Message}");
+            throw;
+        }
     }
 
     /// <summary>
@@ -395,7 +455,9 @@ public class DocumentationService
         
         var bytes = Encoding.UTF8.GetBytes(code);
         var hash = SHA256.HashData(bytes);
-        return Convert.ToHexString(hash)[..CodeHashLength];
+        var hex = Convert.ToHexString(hash);
+        var length = Math.Min(CodeHashLength, hex.Length);
+        return hex[..length];
     }
 
     /// <summary>
@@ -592,12 +654,7 @@ public class DocumentationConfig
     public string SummaryModel { get; set; } = "gpt-4o-mini";
 
     /// <summary>
-    /// Maximum tokens for summary generation.
+    /// Maximum tokens for summary generation (currently not enforced in API calls).
     /// </summary>
     public int MaxSummaryTokens { get; set; } = 300;
-
-    /// <summary>
-    /// Maximum concurrent summary generation calls.
-    /// </summary>
-    public int MaxConcurrentSummaryCalls { get; set; } = 3;
 }

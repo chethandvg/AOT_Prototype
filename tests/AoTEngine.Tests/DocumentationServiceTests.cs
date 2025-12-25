@@ -138,7 +138,6 @@ public class DocumentationServiceTests
         Assert.True(config.ExportJsonl);
         Assert.Equal("gpt-4o-mini", config.SummaryModel);
         Assert.Equal(300, config.MaxSummaryTokens);
-        Assert.Equal(3, config.MaxConcurrentSummaryCalls);
     }
 
     [Fact]

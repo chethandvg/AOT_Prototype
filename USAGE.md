@@ -25,6 +25,10 @@ Create a simple calculator class in C# that can add, subtract, multiply, and div
 3. Parallel execution of independent tasks
 4. Code validation and merging
 5. Final output saved to `generated_code.cs`
+6. Documentation files (if output directory specified):
+   - `Documentation.md`
+   - `Documentation.json`
+   - `training_data.jsonl`
 
 ### Example 2: REST API with Authentication
 
@@ -63,7 +67,12 @@ Create a REST API for managing a todo list with JWT authentication
    - Linting checks performed
    - Retry with error feedback if validation fails
 
-5. **Integration:**
+5. **Documentation Generation:** (NEW)
+   - Per-task summaries generated after validation
+   - Project documentation synthesized
+   - Training dataset exported
+
+6. **Integration:**
    - Contracts validated
    - Code merged into final solution
    - Execution report generated
@@ -80,7 +89,19 @@ Edit `appsettings.json`:
     "Model": "gpt-4"
   },
   "Engine": {
-    "MaxRetries": 5
+    "MaxRetries": 5,
+    "UseBatchValidation": true,
+    "UseHybridValidation": true
+  },
+  "Documentation": {
+    "Enabled": true,
+    "GeneratePerTask": true,
+    "GenerateProjectSummary": true,
+    "ExportMarkdown": true,
+    "ExportJson": true,
+    "ExportJsonl": true,
+    "SummaryModel": "gpt-4o-mini",
+    "MaxSummaryTokens": 300
   }
 }
 ```
@@ -101,25 +122,56 @@ using AoTEngine.Services;
 var openAIService = new OpenAIService(apiKey, "gpt-4");
 var validatorService = new CodeValidatorService();
 var userInteractionService = new UserInteractionService();
+
+// Create documentation service with configuration (NEW)
+var docConfig = new DocumentationConfig
+{
+    Enabled = true,
+    GeneratePerTask = true,
+    GenerateProjectSummary = true,
+    ExportMarkdown = true,
+    ExportJson = true,
+    ExportJsonl = true,
+    SummaryModel = "gpt-4o-mini"
+};
+var documentationService = new DocumentationService(openAIService, docConfig);
+
 var executionEngine = new ParallelExecutionEngine(
     openAIService, 
     validatorService,
-    userInteractionService);
+    userInteractionService,
+    buildService: null,
+    outputDirectory: "./output",
+    documentationService: documentationService);
+
 var mergerService = new CodeMergerService(validatorService);
+
 var orchestrator = new AoTEngineOrchestrator(
     openAIService, 
     executionEngine, 
     mergerService,
-    userInteractionService);
+    userInteractionService,
+    validatorService,
+    documentationService,
+    docConfig);
 
 var result = await orchestrator.ExecuteAsync(
     "Create a microservice for user management",
-    "Use ASP.NET Core 8.0 and Entity Framework"
+    "Use ASP.NET Core 8.0 and Entity Framework",
+    useBatchValidation: true,
+    useHybridValidation: false,
+    outputDirectory: "./output"
 );
 
 if (result.Success)
 {
     Console.WriteLine(result.FinalCode);
+    
+    // Access documentation (NEW)
+    Console.WriteLine(result.FinalDocumentation);
+    Console.WriteLine($"Markdown: {result.DocumentationPaths?.MarkdownPath}");
+    Console.WriteLine($"JSON: {result.DocumentationPaths?.JsonPath}");
+    Console.WriteLine($"JSONL: {result.DocumentationPaths?.JsonlDatasetPath}");
 }
 ```
 
@@ -215,6 +267,11 @@ Task Details:
 
 Merged Code Length: 2847 characters
 Merged Code Lines: 118
+
+✅ Documentation synthesis complete.
+   📄 Exported Markdown documentation to: ./output/Documentation.md
+   📄 Exported JSON documentation to: ./output/Documentation.json
+   📄 Exported JSONL training dataset to: ./output/training_data.jsonl
 ```
 
 ### Generated Code Structure
@@ -239,6 +296,45 @@ namespace DatabaseService
 }
 ```
 
+### Documentation Output (NEW)
+
+#### Documentation.md
+```markdown
+# Project Documentation
+
+**Generated:** 2024-01-15 10:30:00 UTC
+
+## Original Request
+Create a database service
+
+## Architecture Overview
+The project implements a layered database service architecture...
+
+## Task Summaries
+
+### task1: Create database connection manager
+**Namespace:** `DatabaseService`
+**Purpose:** Manages PostgreSQL database connections with connection pooling
+**Key Behaviors:**
+- Connection string configuration
+- Connection pooling
+- Automatic reconnection
+**Validation:** Passed on first attempt
+
+---
+
+### task2: Create repository base class
+**Dependencies:** task1
+**Purpose:** Abstract base class for data repositories
+...
+```
+
+#### training_data.jsonl
+```json
+{"instruction":"Generate C# code for: Create database connection manager","input":{"task_description":"Create database connection manager","dependencies":[],"expected_types":["ConnectionManager"],"namespace":"DatabaseService"},"output":"// C# code...","metadata":{"task_id":"task1","purpose":"Manages database connections","validation_notes":"Passed on first attempt"}}
+{"instruction":"Generate C# code for: Create repository base class","input":{"task_description":"Create repository base class","dependencies":["task1"],"expected_types":["RepositoryBase"]},"output":"// C# code...","metadata":{"task_id":"task2","purpose":"Abstract base for repositories"}}
+```
+
 ## Tips for Best Results
 
 1. **Be Specific**: Provide clear requirements to minimize uncertainties
@@ -246,6 +342,41 @@ namespace DatabaseService
 3. **Review Decomposition**: Always review the task breakdown before execution
 4. **Provide Clarifications**: Answer uncertainty prompts with detailed information
 5. **Check Validation**: Review validation errors and provide additional context if needed
+6. **Review Documentation**: Check generated documentation for accuracy (NEW)
+7. **Use Training Data**: Leverage JSONL exports for fine-tuning models (NEW)
+
+## Documentation Configuration (NEW)
+
+### Disabling Documentation
+```json
+{
+  "Documentation": {
+    "Enabled": false
+  }
+}
+```
+
+### Selective Export
+```json
+{
+  "Documentation": {
+    "Enabled": true,
+    "ExportMarkdown": true,
+    "ExportJson": false,
+    "ExportJsonl": true
+  }
+}
+```
+
+### Custom Summary Model
+```json
+{
+  "Documentation": {
+    "SummaryModel": "gpt-4",
+    "MaxSummaryTokens": 500
+  }
+}
+```
 
 ## Troubleshooting
 
@@ -260,3 +391,9 @@ namespace DatabaseService
 
 ### Issue: Code Compilation Errors
 **Solution:** The validator uses Roslyn; ensure generated code follows C# syntax. The engine will retry up to 3 times with error feedback.
+
+### Issue: Documentation Generation Fails (NEW)
+**Solution:** Documentation failures don't affect code generation. Check console for warnings. Ensure OpenAI API is accessible for summary generation.
+
+### Issue: Empty Training Dataset (NEW)
+**Solution:** Ensure `ExportJsonl` is enabled and tasks have generated code. Check output directory permissions.

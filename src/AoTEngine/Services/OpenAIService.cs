@@ -893,11 +893,29 @@ Return ONLY valid JSON with the structure specified.";
                 return null;
             }
 
-            var content = contentParts[0].Text.Trim();
+            var firstPart = contentParts[0];
+            if (firstPart?.Text == null)
+            {
+                return null;
+            }
+
+            var content = firstPart.Text.Trim();
             
-            // Parse the JSON response
-            var response = JsonConvert.DeserializeObject<TaskSummaryInfo>(content);
-            return response;
+            // Parse the JSON response with specific error handling
+            try
+            {
+                var response = JsonConvert.DeserializeObject<TaskSummaryInfo>(content);
+                if (response == null)
+                {
+                    Console.WriteLine($"   ⚠️  JSON for task {task.Id} deserialized to null");
+                }
+                return response;
+            }
+            catch (JsonException jsonEx)
+            {
+                Console.WriteLine($"   ⚠️  Failed to parse JSON summary for task {task.Id}: {jsonEx.Message}");
+                return null;
+            }
         }
         catch (Exception ex)
         {
@@ -967,7 +985,13 @@ Return a concise markdown-formatted summary.";
                 return description;
             }
 
-            return contentParts[0].Text.Trim();
+            var firstPart = contentParts[0];
+            if (firstPart?.Text == null)
+            {
+                return description;
+            }
+
+            return firstPart.Text.Trim();
         }
         catch (Exception ex)
         {
