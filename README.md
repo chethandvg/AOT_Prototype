@@ -18,6 +18,8 @@ The AoT Engine is a sophisticated C# application that leverages OpenAI's GPT mod
 - Uses OpenAI to decompose complex requests into atomic subtasks
 - Creates a Directed Acyclic Graph (DAG) of dependencies
 - Identifies parallel execution opportunities
+- **Automatic complexity analysis**: Ensures each task generates ≤300 lines of code
+- **Smart decomposition**: Complex tasks are automatically split into smaller subtasks
 
 ### 2. **Parallel Execution**
 - Executes independent tasks concurrently using `async`/`await` and `Task.WhenAll`
@@ -55,8 +57,10 @@ The AoT Engine is a sophisticated C# application that leverages OpenAI's GPT mod
 AoTEngine/
 ├── Models/                     # Data models
 │   ├── TaskNode.cs            # Represents atomic task in DAG
-│   ├── TaskSummaryRecord.cs   # Structured task documentation (NEW)
-│   ├── ProjectDocumentation.cs # Project-level documentation (NEW)
+│   ├── TaskSummaryRecord.cs   # Structured task documentation
+│   ├── ProjectDocumentation.cs # Project-level documentation
+│   ├── ComplexityMetrics.cs   # Task complexity analysis metrics (NEW)
+│   ├── TaskDecompositionStrategy.cs # Decomposition strategies (NEW)
 │   ├── TaskDecompositionRequest.cs
 │   ├── TaskDecompositionResponse.cs
 │   └── ValidationResult.cs
@@ -64,7 +68,9 @@ AoTEngine/
 │   ├── OpenAIService.cs       # OpenAI API integration
 │   ├── CodeValidatorService.cs # Code compilation & validation
 │   ├── CodeMergerService.cs   # Code merging & contract validation
-│   ├── DocumentationService.cs # Documentation generation (NEW)
+│   ├── DocumentationService.cs # Documentation generation
+│   ├── TaskComplexityAnalyzer.cs # Complexity analysis service (NEW)
+│   ├── AutoDecomposer.cs      # Automatic task decomposition (NEW)
 │   └── UserInteractionService.cs # Handles user input for uncertainties
 ├── Core/                       # Engine components
 │   ├── ParallelExecutionEngine.cs # Parallel task execution
@@ -188,7 +194,9 @@ dotnet test
   "Engine": {
     "MaxRetries": 3,
     "UseBatchValidation": true,
-    "UseHybridValidation": true
+    "UseHybridValidation": true,
+    "MaxLinesPerTask": 300,
+    "EnableComplexityAnalysis": true
   },
   "Documentation": {
     "Enabled": true,
@@ -201,6 +209,13 @@ dotnet test
     "MaxSummaryTokens": 300
   }
 }
+
+### Complexity Analysis Configuration
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| `MaxLinesPerTask` | `300` | Maximum lines of code per generated task |
+| `EnableComplexityAnalysis` | `true` | Enable automatic task complexity analysis and decomposition |
 ```
 
 ### Documentation Configuration
@@ -223,6 +238,7 @@ dotnet test
    - OpenAI decomposes it into atomic subtasks
    - Dependencies are identified
    - User reviews and confirms the decomposition
+   - **Complexity analysis**: Tasks exceeding 300 lines are automatically split
 
 2. **Uncertainty Resolution Phase**
    - System detects vague or ambiguous terms
@@ -360,6 +376,8 @@ Merged Code Lines: 142
 
 - [x] Documentation generation layer
 - [x] Fine-tuning dataset export
+- [x] **Task complexity analysis** - Automatic detection of complex tasks
+- [x] **Automatic decomposition** - Split complex tasks into ≤300 line subtasks
 - [ ] Actual unit test execution
 - [ ] Support for multiple programming languages
 - [ ] Integration with CI/CD pipelines

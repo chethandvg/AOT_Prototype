@@ -91,7 +91,9 @@ Edit `appsettings.json`:
   "Engine": {
     "MaxRetries": 5,
     "UseBatchValidation": true,
-    "UseHybridValidation": true
+    "UseHybridValidation": true,
+    "MaxLinesPerTask": 300,
+    "EnableComplexityAnalysis": true
   },
   "Documentation": {
     "Enabled": true,
@@ -160,7 +162,9 @@ var result = await orchestrator.ExecuteAsync(
     "Use ASP.NET Core 8.0 and Entity Framework",
     useBatchValidation: true,
     useHybridValidation: false,
-    outputDirectory: "./output"
+    outputDirectory: "./output",
+    maxLinesPerTask: 300,           // Max lines per generated task (NEW)
+    enableComplexityAnalysis: true   // Enable automatic decomposition (NEW)
 );
 
 if (result.Success)
@@ -344,6 +348,37 @@ The project implements a layered database service architecture...
 5. **Check Validation**: Review validation errors and provide additional context if needed
 6. **Review Documentation**: Check generated documentation for accuracy (NEW)
 7. **Use Training Data**: Leverage JSONL exports for fine-tuning models (NEW)
+8. **Large Tasks**: The engine automatically splits tasks >300 lines into smaller subtasks (NEW)
+
+## Complexity Analysis Configuration (NEW)
+
+### Maximum Lines Per Task
+```json
+{
+  "Engine": {
+    "MaxLinesPerTask": 300,
+    "EnableComplexityAnalysis": true
+  }
+}
+```
+
+### Disabling Complexity Analysis
+```json
+{
+  "Engine": {
+    "EnableComplexityAnalysis": false
+  }
+}
+```
+
+### Custom Line Threshold
+```json
+{
+  "Engine": {
+    "MaxLinesPerTask": 500
+  }
+}
+```
 
 ## Documentation Configuration (NEW)
 
@@ -397,3 +432,9 @@ The project implements a layered database service architecture...
 
 ### Issue: Empty Training Dataset (NEW)
 **Solution:** Ensure `ExportJsonl` is enabled and tasks have generated code. Check output directory permissions.
+
+### Issue: Task Automatically Split (NEW)
+**Explanation:** Tasks estimated to generate more than 300 lines are automatically decomposed into smaller subtasks. This is expected behavior and helps maintain code manageability.
+
+### Issue: Unexpected Subtask Count (NEW)
+**Solution:** Adjust `MaxLinesPerTask` in configuration. Lower values create more subtasks, higher values allow larger code blocks. Default is 300 lines.

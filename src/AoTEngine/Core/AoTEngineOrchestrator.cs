@@ -15,6 +15,7 @@ public class AoTEngineOrchestrator
     private readonly CodeValidatorService _validatorService;
     private readonly DocumentationService? _documentationService;
     private readonly DocumentationConfig? _documentationConfig;
+    private const int DefaultMaxLineThreshold = 300;
 
     public AoTEngineOrchestrator(
         OpenAIService openAIService,
@@ -37,12 +38,21 @@ public class AoTEngineOrchestrator
     /// <summary>
     /// Executes the complete AoT workflow.
     /// </summary>
+    /// <param name="userRequest">The user's request to execute.</param>
+    /// <param name="context">Additional context for the request.</param>
+    /// <param name="useBatchValidation">Whether to use batch validation mode.</param>
+    /// <param name="useHybridValidation">Whether to use hybrid validation mode.</param>
+    /// <param name="outputDirectory">Output directory for generated code.</param>
+    /// <param name="maxLinesPerTask">Maximum lines per generated task (default: 300). Tasks exceeding this will be decomposed.</param>
+    /// <param name="enableComplexityAnalysis">Whether to enable complexity analysis and automatic decomposition.</param>
     public async Task<AoTResult> ExecuteAsync(
         string userRequest, 
         string context = "", 
         bool useBatchValidation = true, 
         bool useHybridValidation = false,
-        string? outputDirectory = null)
+        string? outputDirectory = null,
+        int maxLinesPerTask = DefaultMaxLineThreshold,
+        bool enableComplexityAnalysis = true)
     {
         var result = new AoTResult { OriginalRequest = userRequest };
 
@@ -67,6 +77,21 @@ public class AoTEngineOrchestrator
             {
                 var deps = task.Dependencies.Any() ? string.Join(", ", task.Dependencies) : "None";
                 Console.WriteLine($"  - {task.Id}: {task.Description} [Dependencies: {deps}]");
+            }
+
+            // Step 1.5: Complexity analysis and automatic decomposition of complex tasks
+            if (enableComplexityAnalysis)
+            {
+                Console.WriteLine($"\nStep 1.5: Analyzing task complexity (max {maxLinesPerTask} lines per task)...");
+                var originalTaskCount = result.Tasks.Count;
+                result.Tasks = await _executionEngine.AnalyzeAndDecomposeComplexTasksAsync(
+                    result.Tasks, 
+                    maxLinesPerTask);
+                
+                if (result.Tasks.Count != originalTaskCount)
+                {
+                    Console.WriteLine($"📋 Tasks after complexity analysis: {result.Tasks.Count} (was {originalTaskCount})");
+                }
             }
 
             // Step 2: Execute tasks - choose validation mode
@@ -94,17 +119,17 @@ public class AoTEngineOrchestrator
             if (useHybridValidation)
             {
                 Console.WriteLine("\nStep 2: Executing tasks with hybrid validation (individual + batch)...");
-                result.Tasks = await executionEngine.ExecuteTasksWithHybridValidationAsync(decomposition.Tasks);
+                result.Tasks = await executionEngine.ExecuteTasksWithHybridValidationAsync(result.Tasks);
             }
             else if (useBatchValidation)
             {
                 Console.WriteLine("\nStep 2: Executing tasks with batch validation (inter-references will be resolved)...");
-                result.Tasks = await executionEngine.ExecuteTasksWithBatchValidationAsync(decomposition.Tasks);
+                result.Tasks = await executionEngine.ExecuteTasksWithBatchValidationAsync(result.Tasks);
             }
             else
             {
                 Console.WriteLine("\nStep 2: Executing tasks in parallel with individual validation...");
-                result.Tasks = await _executionEngine.ExecuteTasksAsync(decomposition.Tasks);
+                result.Tasks = await _executionEngine.ExecuteTasksAsync(result.Tasks);
             }
 
             // Step 3: Validate contracts
