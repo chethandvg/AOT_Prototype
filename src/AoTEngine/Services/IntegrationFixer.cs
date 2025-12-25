@@ -45,15 +45,20 @@ public class IntegrationFixer
 {
     private readonly TypeRegistry _typeRegistry;
     private readonly SymbolTable _symbolTable;
+    private readonly Dictionary<string, string> _customTypeNamespaces;
 
-    // Known namespace mappings for missing using resolution
-    private static readonly Dictionary<string, string> KnownTypeNamespaces = new(StringComparer.OrdinalIgnoreCase)
+    /// <summary>
+    /// Default known namespace mappings for common .NET types.
+    /// These are used when resolving missing using statements.
+    /// Can be extended via constructor or AddTypeNamespaceMapping method.
+    /// </summary>
+    private static readonly Dictionary<string, string> DefaultKnownTypeNamespaces = new(StringComparer.OrdinalIgnoreCase)
     {
-        { "IDataValidator", "OilAnalytics.Validation" },
-        { "ValidationIssue", "OilAnalytics.Validation" },
+        // Microsoft.Extensions types
         { "ILogger", "Microsoft.Extensions.Logging" },
         { "IConfiguration", "Microsoft.Extensions.Configuration" },
         { "IServiceCollection", "Microsoft.Extensions.DependencyInjection" },
+        // System types
         { "Task", "System.Threading.Tasks" },
         { "List", "System.Collections.Generic" },
         { "Dictionary", "System.Collections.Generic" },
@@ -66,9 +71,42 @@ public class IntegrationFixer
     };
 
     public IntegrationFixer(TypeRegistry typeRegistry, SymbolTable symbolTable)
+        : this(typeRegistry, symbolTable, null)
+    {
+    }
+
+    /// <summary>
+    /// Creates an IntegrationFixer with custom type-to-namespace mappings.
+    /// </summary>
+    /// <param name="typeRegistry">The type registry.</param>
+    /// <param name="symbolTable">The symbol table.</param>
+    /// <param name="customTypeNamespaces">Custom mappings to add/override default mappings.</param>
+    public IntegrationFixer(TypeRegistry typeRegistry, SymbolTable symbolTable, Dictionary<string, string>? customTypeNamespaces)
     {
         _typeRegistry = typeRegistry;
         _symbolTable = symbolTable;
+        _customTypeNamespaces = customTypeNamespaces ?? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// Adds or updates a type-to-namespace mapping for missing using resolution.
+    /// </summary>
+    public void AddTypeNamespaceMapping(string typeName, string namespaceName)
+    {
+        _customTypeNamespaces[typeName] = namespaceName;
+    }
+
+    /// <summary>
+    /// Gets the namespace for a type name, checking custom mappings first, then defaults.
+    /// </summary>
+    private bool TryGetTypeNamespace(string typeName, out string? namespaceName)
+    {
+        if (_customTypeNamespaces.TryGetValue(typeName, out namespaceName))
+            return true;
+        if (DefaultKnownTypeNamespaces.TryGetValue(typeName, out namespaceName))
+            return true;
+        namespaceName = null;
+        return false;
     }
 
     /// <summary>
@@ -234,6 +272,8 @@ public class IntegrationFixer
 
     /// <summary>
     /// Resolves ambiguous type references by fully qualifying them.
+    /// Note: This uses a regex-based approach which may not catch all edge cases.
+    /// For more precise resolution, consider using Roslyn semantic analysis.
     /// </summary>
     public string ResolveAmbiguousReferences(string code, Dictionary<string, string> ambiguousTypeToFullName)
     {
@@ -243,7 +283,12 @@ public class IntegrationFixer
         var result = code;
         foreach (var (simpleName, fullyQualified) in ambiguousTypeToFullName)
         {
-            // Pattern to match type usage (not in namespace declaration)
+            // Regex pattern explanation:
+            // (?<!\bnamespace\s+.*?) - Negative lookbehind: not preceded by "namespace " (to avoid namespace declarations)
+            // (?<!\.)               - Negative lookbehind: not preceded by a dot (to avoid already-qualified names)
+            // (?<![a-zA-Z0-9_])     - Negative lookbehind: not preceded by identifier chars (word boundary)
+            // {escapedName}         - The type name we're replacing
+            // (?![a-zA-Z0-9_])      - Negative lookahead: not followed by identifier chars (word boundary)
             var pattern = $@"(?<!\bnamespace\s+.*?)(?<!\.)(?<![a-zA-Z0-9_]){Regex.Escape(simpleName)}(?![a-zA-Z0-9_])";
             result = Regex.Replace(result, pattern, fullyQualified);
         }
@@ -354,8 +399,8 @@ public class IntegrationFixer
 
         var typeName = match.Groups[1].Value;
 
-        // Check if we know the namespace for this type
-        if (KnownTypeNamespaces.TryGetValue(typeName, out var ns))
+        // Check if we know the namespace for this type (custom mappings first, then defaults)
+        if (TryGetTypeNamespace(typeName, out var ns) && ns != null)
         {
             var fixedCode = AddMissingUsings(code, new List<string> { ns });
             if (fixedCode != code)

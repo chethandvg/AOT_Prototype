@@ -462,6 +462,11 @@ public partial class CodeMergerService
     }
 
     /// <summary>
+    /// Cached default references for compilation. Initialized lazily and reused.
+    /// </summary>
+    private List<MetadataReference>? _cachedDefaultReferences;
+
+    /// <summary>
     /// Applies integration fixes using Roslyn compilation.
     /// </summary>
     private async Task<IntegrationFixResult> ApplyIntegrationFixesAsync(string code, MergeOptions options)
@@ -470,12 +475,14 @@ public partial class CodeMergerService
         {
             // Compile and get diagnostics
             var syntaxTree = CSharpSyntaxTree.ParseText(code);
-            var references = _validatorService.GetDefaultReferences();
+            
+            // Use cached references for efficiency
+            _cachedDefaultReferences ??= _validatorService.GetDefaultReferences();
             
             var compilation = CSharpCompilation.Create(
                 $"IntegrationCheck_{Guid.NewGuid():N}",
                 new[] { syntaxTree },
-                references,
+                _cachedDefaultReferences,
                 new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
 
             var diagnostics = compilation.GetDiagnostics();
