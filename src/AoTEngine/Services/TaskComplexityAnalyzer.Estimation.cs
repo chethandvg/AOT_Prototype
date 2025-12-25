@@ -84,9 +84,12 @@ public partial class TaskComplexityAnalyzer
         var count = 1; // At least one method
 
         // Check for method indicator patterns using compiled regexes
-        foreach (var regex in MethodIndicatorRegexes.Where(r => r.IsMatch(lowerDesc)))
+        foreach (var regex in MethodIndicatorRegexes)
         {
-            count += 2;
+            if (regex.IsMatch(lowerDesc))
+            {
+                count += 2;
+            }
         }
 
         // CRUD operations typically mean 4+ methods

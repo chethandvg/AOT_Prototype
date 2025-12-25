@@ -48,7 +48,7 @@ public partial class TaskComplexityAnalyzer
     /// Analyzes a task to determine its complexity metrics.
     /// </summary>
     /// <param name="task">The task to analyze.</param>
-    /// <param name="maxLineThreshold">Maximum allowed lines of code (default: 100).</param>
+    /// <param name="maxLineThreshold">Maximum allowed lines of code (default: 300).</param>
     /// <returns>Complexity metrics for the task.</returns>
     public ComplexityMetrics AnalyzeTask(TaskNode task, int maxLineThreshold = DefaultMaxLineThreshold)
     {

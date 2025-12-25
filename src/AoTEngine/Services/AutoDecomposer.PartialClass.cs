@@ -103,9 +103,10 @@ public partial class AutoDecomposer
             var taskToCheck = existingTasks.FirstOrDefault(t => t.Id == taskId);
             if (taskToCheck?.Dependencies != null)
             {
-                foreach (var dep in taskToCheck.Dependencies.Where(d => HasCycle(d)))
+                foreach (var dep in taskToCheck.Dependencies)
                 {
-                    return true;
+                    if (HasCycle(dep))
+                        return true;
                 }
             }
 
