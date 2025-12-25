@@ -14,8 +14,11 @@ public class ParallelExecutionEngine
     private readonly UserInteractionService _userInteractionService;
     private readonly ProjectBuildService? _buildService;
     private readonly DocumentationService? _documentationService;
+    private readonly TaskComplexityAnalyzer _complexityAnalyzer;
     private readonly string? _outputDirectory;
+    private readonly string? _apiKey;
     private const int MaxRetries = 3;
+    private const int DefaultMaxLineThreshold = 100;
 
     public ParallelExecutionEngine(
         OpenAIService openAIService, 
@@ -23,7 +26,8 @@ public class ParallelExecutionEngine
         UserInteractionService userInteractionService,
         ProjectBuildService? buildService = null,
         string? outputDirectory = null,
-        DocumentationService? documentationService = null)
+        DocumentationService? documentationService = null,
+        string? apiKey = null)
     {
         _openAIService = openAIService;
         _validatorService = validatorService;
@@ -31,6 +35,115 @@ public class ParallelExecutionEngine
         _buildService = buildService;
         _outputDirectory = outputDirectory;
         _documentationService = documentationService;
+        _complexityAnalyzer = new TaskComplexityAnalyzer();
+        _apiKey = apiKey;
+    }
+
+    /// <summary>
+    /// Performs pre-execution complexity analysis and decomposition of complex tasks.
+    /// Ensures no task will generate more than the specified line threshold.
+    /// </summary>
+    /// <param name="tasks">List of tasks to analyze.</param>
+    /// <param name="maxLineThreshold">Maximum lines per task (default: 100).</param>
+    /// <returns>Modified task list with complex tasks decomposed.</returns>
+    public async Task<List<TaskNode>> AnalyzeAndDecomposeComplexTasksAsync(
+        List<TaskNode> tasks,
+        int maxLineThreshold = DefaultMaxLineThreshold)
+    {
+        Console.WriteLine($"\n📊 Analyzing task complexity (max {maxLineThreshold} lines per task)...");
+
+        var complexTasks = _complexityAnalyzer.AnalyzeTasksForDecomposition(tasks, maxLineThreshold);
+
+        if (!complexTasks.Any())
+        {
+            Console.WriteLine("✅ All tasks are within complexity limits.");
+            return tasks;
+        }
+
+        Console.WriteLine($"⚠️  Found {complexTasks.Count} task(s) requiring decomposition:");
+        foreach (var (task, metrics) in complexTasks)
+        {
+            Console.WriteLine($"   - {task.Id}: ~{metrics.EstimatedLineCount} lines (score: {metrics.ComplexityScore}/100)");
+        }
+
+        var modifiedTasks = new List<TaskNode>(tasks);
+
+        // Decompose each complex task
+        foreach (var (task, metrics) in complexTasks)
+        {
+            try
+            {
+                Console.WriteLine($"\n📋 Decomposing '{task.Id}' into {metrics.RecommendedSubtaskCount} subtasks...");
+
+                var subtasks = await _openAIService.DecomposeComplexTaskAsync(
+                    task,
+                    metrics.RecommendedSubtaskCount,
+                    maxLineThreshold);
+
+                if (subtasks.Any())
+                {
+                    // Replace original task with subtasks
+                    modifiedTasks = ReplaceTaskWithSubtasks(modifiedTasks, task, subtasks);
+                    Console.WriteLine($"✅ Decomposed '{task.Id}' into {subtasks.Count} subtasks");
+                }
+                else
+                {
+                    Console.WriteLine($"⚠️  Could not decompose '{task.Id}', keeping original");
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"❌ Failed to decompose '{task.Id}': {ex.Message}");
+                // Keep original task if decomposition fails
+            }
+        }
+
+        Console.WriteLine($"\n📋 Final task count: {modifiedTasks.Count}");
+        return modifiedTasks;
+    }
+
+    /// <summary>
+    /// Replaces a task with its subtasks in the task list.
+    /// </summary>
+    private List<TaskNode> ReplaceTaskWithSubtasks(
+        List<TaskNode> tasks,
+        TaskNode originalTask,
+        List<TaskNode> subtasks)
+    {
+        var result = new List<TaskNode>();
+
+        foreach (var task in tasks)
+        {
+            if (task.Id == originalTask.Id)
+            {
+                // Replace with subtasks
+                result.AddRange(subtasks);
+            }
+            else
+            {
+                // Update dependencies that reference the original task
+                if (task.Dependencies.Contains(originalTask.Id))
+                {
+                    task.Dependencies.Remove(originalTask.Id);
+                    // Depend on the last subtask instead
+                    if (subtasks.Any())
+                    {
+                        task.Dependencies.Add(subtasks.Last().Id);
+                    }
+                }
+                result.Add(task);
+            }
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Gets complexity metrics for a specific task.
+    /// </summary>
+    public ComplexityMetrics GetTaskComplexityMetrics(TaskNode task, int maxLineThreshold = DefaultMaxLineThreshold)
+    {
+        return _complexityAnalyzer.AnalyzeTask(task, maxLineThreshold);
     }
 
     /// <summary>
