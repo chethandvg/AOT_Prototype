@@ -5,16 +5,27 @@ This folder contains the core orchestration and execution engine components for 
 ## Components
 
 ### AoTEngineOrchestrator
-The main orchestrator that coordinates the entire AoT workflow including task decomposition, execution, validation, and documentation generation.
+The main orchestrator that coordinates the entire AoT workflow including task decomposition, contract generation, execution, validation, and documentation generation.
 
 **Files:**
 - `AoTEngineOrchestrator.cs` - Main orchestrator class (271 lines)
+  - `ExecuteAsync()` - Main workflow with 7 steps:
+    - Step 1: Decompose request
+    - Step 1.25: Contract generation (when `enableContractFirst=true`) (NEW)
+    - Step 1.5: Complexity analysis
+    - Step 2: Execute tasks
+    - Step 3: Validate contracts
+    - Step 4: Merge code
+    - Step 5: Generate report
+    - Step 6: Synthesize documentation
+  - `ExtractProjectName()` - Extracts project name from user request for namespace prefixing
 
 ### AoTResult
 Result model returned from AoT Engine execution.
 
 **Files:**
 - `AoTResult.cs` - Result and DocumentationPaths classes (80 lines)
+  - `ContractCatalog` property - Access to frozen contracts (NEW)
 
 ### ParallelExecutionEngine
 Engine for executing tasks in parallel based on their dependencies, with support for batch and hybrid validation modes.

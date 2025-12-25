@@ -1,6 +1,6 @@
 # Services Folder
 
-This folder contains the service layer components for the AoT Engine, handling AI interaction, code validation, project building, and documentation generation.
+This folder contains the service layer components for the AoT Engine, handling AI interaction, code validation, project building, documentation generation, and contract-first code generation.
 
 ## Components
 
@@ -15,6 +15,7 @@ Handles all interactions with OpenAI API for task decomposition, code generation
 - `OpenAIService.PackageVersions.cs` - Package version queries (181 lines)
 - `OpenAIService.Documentation.cs` - Documentation generation (212 lines)
 - `OpenAIService.TaskDecomposition.cs` - Complex task decomposition (159 lines)
+- `OpenAIService.ContractAware.cs` - Contract-aware code generation with violation feedback loop (NEW)
 
 ### CodeValidatorService
 Validates generated C# code using Roslyn compilation.
@@ -87,6 +88,62 @@ Provides known stable package versions for .NET 9.
 
 **Files:**
 - `KnownPackageVersions.cs` - Package version mappings
+
+### ContractGenerationService (NEW)
+Generates and freezes API contracts (enums, interfaces, models, abstract classes) before implementations.
+
+**Files:**
+- `ContractGenerationService.cs` - Contract generation from task decomposition:
+  - Analyzes tasks for types needing contracts
+  - Generates frozen enums with valid member lists
+  - Generates frozen interfaces with exact method signatures
+  - Generates frozen models/DTOs with property definitions
+  - Generates frozen abstract classes with required overrides
+  - Registers contracts in Symbol Table
+
+### ContractManifestService (NEW)
+Persists and loads frozen contracts in JSON format for reproducibility.
+
+**Files:**
+- `ContractManifestService.cs` - Contract persistence and validation:
+  - `SaveManifestAsync()` - Serializes ContractCatalog to JSON
+  - `LoadManifestAsync()` - Loads manifest and returns ContractCatalog
+  - `GenerateContractFilesAsync()` - Creates .cs files for each contract
+  - `ValidateEnumMember()` - Validates enum member exists in contract
+  - `ValidateInterfaceMethod()` - Validates method signature matches contract
+  - `IsTypeSealed()` - Checks if type is sealed in contracts
+
+### PromptContextBuilder (NEW)
+Builds enhanced prompt context with frozen contracts, known symbols, and guardrails.
+
+**Files:**
+- `PromptContextBuilder.cs` - Prompt context enhancement:
+  - `BuildCodeGenerationContext()` - Injects contracts and guardrails
+  - `BuildInterfaceImplementationContext()` - Lists required methods with exact signatures
+  - `BuildAbstractClassImplementationContext()` - Lists abstract methods to override
+  - `BuildEnumUsageContext()` - Lists valid enum members
+  - `ValidateAgainstContracts()` - Checks for contract violations
+
+### AtomCompilationService (NEW)
+Performs fast Roslyn compilation per file with classified diagnostics for early failure detection.
+
+**Files:**
+- `AtomCompilationService.cs` - Per-atom compilation:
+  - `CompileAtom()` - Fast Roslyn compile per generated file
+  - `ClassifyDiagnostic()` - Classifies errors (SymbolCollision, MissingInterfaceMember, SignatureMismatch, etc.)
+  - `ValidateAgainstContracts()` - Validates generated code against frozen contracts
+  - `GenerateCompilationSummary()` - Human-readable error summary for LLM feedback
+
+### AutoFixService (NEW)
+Provides compiler-driven patching loop for common integration errors.
+
+**Files:**
+- `AutoFixService.cs` - Auto-fix capabilities:
+  - `TryAutoFixAsync()` - Main auto-fix loop with retry logic
+  - `TryFixMissingInterfaceMember()` - Adds stub implementations
+  - `TryFixMissingAbstractMember()` - Adds override stubs
+  - `TryFixSealedInheritance()` - Converts inheritance to composition
+  - `TryFixAmbiguousReference()` - Fully qualifies type names
 
 ## Design Principles
 
