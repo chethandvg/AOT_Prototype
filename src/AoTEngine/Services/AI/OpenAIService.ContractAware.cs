@@ -7,7 +7,22 @@ namespace AoTEngine.Services;
 /// <summary>
 /// Partial class containing contract-aware code generation methods.
 /// These methods use the Contract-First approach to prevent type mismatches and missing members.
+/// Integrates with the gpt-5.1-codex Responses API to leverage response chaining for better
+/// contract compliance and context awareness.
 /// </summary>
+/// <remarks>
+/// Contract-Aware Generation with Response Chaining:
+/// This approach combines frozen contract validation with response chaining to achieve:
+/// - Strict adherence to predefined interface and type contracts
+/// - Context continuity from dependency responses
+/// - Iterative refinement with contract violation feedback
+/// - Reduced type mismatch errors through explicit contract context
+/// 
+/// The response chaining capability is particularly valuable in contract-aware scenarios because:
+/// - Contract definitions can be referenced implicitly through chained context
+/// - Error corrections maintain awareness of contract requirements
+/// - Dependent implementations can build upon contract-compliant dependencies
+/// </remarks>
 public partial class OpenAIService
 {
     private ContractCatalog? _contractCatalog;
@@ -29,9 +44,30 @@ public partial class OpenAIService
     }
 
     /// <summary>
-    /// Generates code for a task using contract-aware context.
+    /// Generates code for a task using contract-aware context with response chaining.
     /// This method uses frozen contracts to prevent type mismatches and missing members.
     /// </summary>
+    /// <param name="task">The task node containing generation requirements.</param>
+    /// <param name="completedTasks">Dictionary of completed tasks that this task may depend on.</param>
+    /// <returns>The generated C# code that complies with frozen contracts.</returns>
+    /// <remarks>
+    /// Contract-Aware Response Chaining:
+    /// This method combines two powerful techniques:
+    /// 
+    /// 1. Frozen Contracts: Provides explicit type definitions and interface signatures that
+    ///    implementations must conform to, preventing signature mismatches.
+    /// 
+    /// 2. Response Chaining: Links to previous dependency responses, giving the model implicit
+    ///    context about how contracts were implemented in related code.
+    /// 
+    /// The combination ensures both structural compliance (via contracts) and contextual coherence
+    /// (via chaining). When contract violations are detected, the method can iterate with the
+    /// violation feedback while maintaining response chain context.
+    /// 
+    /// Fallback Behavior:
+    /// If no contract catalog is configured, falls back to regular code generation without
+    /// contract validation but still with response chaining support.
+    /// </remarks>
     public async Task<string> GenerateCodeWithContractsAsync(
         TaskNode task,
         Dictionary<string, TaskNode> completedTasks)
@@ -46,6 +82,17 @@ public partial class OpenAIService
         var enhancedContextBuilder = new StringBuilder();
         enhancedContextBuilder.Append(_promptContextBuilder.BuildCodeGenerationContext(task, completedTasks));
 
+        // Determine if we can chain from a previous response
+        string? previousResponseId = null;
+        if (task.Dependencies.Any())
+        {
+            var lastDep = task.Dependencies.LastOrDefault(depId => _responseChain.ContainsKey(depId));
+            if (lastDep != null)
+            {
+                previousResponseId = _responseChain[lastDep];
+            }
+        }
+
         for (int attempt = 0; attempt < MaxRetries; attempt++)
         {
             try
@@ -59,7 +106,12 @@ public partial class OpenAIService
                     new UserChatMessage(userPrompt)
                 };
 
-                var content = await CallCodeGenChatCompletionAsync(messages);
+                // Use Codex Responses API with chaining
+                var (responseId, content) = await CallCodexResponsesAsync(messages, previousResponseId);
+                
+                // Store response ID for potential chaining
+                _responseChain[task.Id] = responseId;
+                
                 var generatedCode = CleanGeneratedCode(content);
 
                 // Validate against contracts
@@ -83,6 +135,8 @@ public partial class OpenAIService
                             enhancedContextBuilder.AppendLine(violation);
                         }
                         enhancedContextBuilder.AppendLine("*/");
+                        // Update previousResponseId to chain from this attempt
+                        previousResponseId = responseId;
                         continue;
                     }
                 }
@@ -199,8 +253,30 @@ Return ONLY the C# code without any markdown formatting or explanations.";
     }
 
     /// <summary>
-    /// Regenerates code with contract violation feedback.
+    /// Regenerates code with contract violation feedback using response chaining.
     /// </summary>
+    /// <param name="task">The task to regenerate code for.</param>
+    /// <param name="validationResult">Validation errors and warnings from compilation.</param>
+    /// <param name="contractViolations">Optional list of specific contract violations detected.</param>
+    /// <returns>The regenerated C# code that addresses violations and errors.</returns>
+    /// <remarks>
+    /// Contract-Aware Regeneration with Response Chaining:
+    /// This method maintains the response chain from the original generation, ensuring the model
+    /// remembers the original intent and contract requirements while fixing violations.
+    /// 
+    /// The regeneration process prioritizes:
+    /// 1. Contract violations (signature mismatches, missing implementations)
+    /// 2. Compilation errors (syntax, type errors)
+    /// 3. Warnings (style, nullability)
+    /// 
+    /// By chaining from the previous response, the model can understand what was attempted
+    /// originally and make surgical fixes rather than complete rewrites, preserving working
+    /// code while addressing specific issues.
+    /// 
+    /// Fallback Behavior:
+    /// If no contract catalog is configured, delegates to regular error-based regeneration
+    /// while still maintaining response chain context.
+    /// </remarks>
     public async Task<string> RegenerateCodeWithContractFeedbackAsync(
         TaskNode task,
         ValidationResult validationResult,
@@ -216,6 +292,9 @@ Return ONLY the C# code without any markdown formatting or explanations.";
         var violationsText = contractViolations != null 
             ? string.Join("\n", contractViolations) 
             : string.Empty;
+
+        // Get previous response ID for chaining
+        string? previousResponseId = _responseChain.ContainsKey(task.Id) ? _responseChain[task.Id] : null;
 
         var systemPrompt = @"You are an expert C# programmer fixing code to comply with FROZEN CONTRACTS.
 
@@ -266,7 +345,12 @@ Return ONLY the fixed C# code without any markdown formatting or explanations.";
         {
             try
             {
-                var content = await CallCodeGenChatCompletionAsync(messages);
+                // Use Codex Responses API with chaining
+                var (responseId, content) = await CallCodexResponsesAsync(messages, previousResponseId);
+                
+                // Update response ID for this task
+                _responseChain[task.Id] = responseId;
+                
                 var fixedCode = CleanGeneratedCode(content);
                 task.TypeContract = ExtractTypeContract(fixedCode);
 

@@ -7,6 +7,56 @@ using System.Text;
 namespace AoTEngine.Services;
 
 /// <summary>
+/// OpenAI API response models for Responses endpoint (gpt-5.1-codex).
+/// The Responses API provides enhanced context management through response chaining,
+/// allowing subsequent requests to reference previous responses via response IDs.
+/// </summary>
+internal class CodexResponse
+{
+    [JsonProperty("id")]
+    public string? Id { get; set; }
+
+    [JsonProperty("output")]
+    public List<CodexOutputItem>? Output { get; set; }
+
+    [JsonProperty("error")]
+    public CodexError? Error { get; set; }
+}
+
+internal class CodexOutputItem
+{
+    [JsonProperty("type")]
+    public string? Type { get; set; }
+
+    [JsonProperty("role")]
+    public string? Role { get; set; }
+
+    [JsonProperty("content")]
+    public List<CodexContentPart>? Content { get; set; }
+}
+
+internal class CodexContentPart
+{
+    [JsonProperty("type")]
+    public string? Type { get; set; }
+
+    [JsonProperty("text")]
+    public string? Text { get; set; }
+}
+
+internal class CodexError
+{
+    [JsonProperty("message")]
+    public string? Message { get; set; }
+
+    [JsonProperty("type")]
+    public string? Type { get; set; }
+
+    [JsonProperty("code")]
+    public string? Code { get; set; }
+}
+
+/// <summary>
 /// OpenAI API response models for Chat Completion endpoint.
 /// </summary>
 internal class ChatCompletionResponse
@@ -48,13 +98,26 @@ internal class ChatCompletionError
 /// </summary>
 /// <remarks>
 /// This class is split into multiple partial class files for maintainability:
-/// - OpenAIService.cs (this file): Core fields, constructor, and initial task decomposition
-/// - OpenAIService.CodeGeneration.cs: Code generation and regeneration methods
+/// - OpenAIService.cs (this file): Core fields, constructor, response API handling, and task decomposition
+/// - OpenAIService.CodeGeneration.cs: Code generation and regeneration methods with response chaining
 /// - OpenAIService.Prompts.cs: Prompt generation methods
 /// - OpenAIService.ContractExtraction.cs: Type contract extraction methods
 /// - OpenAIService.PackageVersions.cs: Package version query methods
 /// - OpenAIService.Documentation.cs: Documentation and summary generation
 /// - OpenAIService.TaskDecomposition.cs: Complex task decomposition methods
+/// - OpenAIService.ContractAware.cs: Contract-aware code generation with frozen contracts
+/// 
+/// Code Generation Architecture:
+/// The service uses the gpt-5.1-codex model via the OpenAI Responses API (/v1/responses) for all code generation.
+/// This endpoint provides:
+/// - Response storage: All responses are stored server-side (store: true) for retrieval and chaining
+/// - Response chaining: Subsequent requests can reference previous responses via previous_response_id
+/// - Context continuity: Maintains conversation context across multiple related code generation tasks
+/// 
+/// Response chaining is particularly useful for:
+/// - Generating dependent code that relies on previously generated types
+/// - Maintaining context during error correction and code regeneration
+/// - Building upon earlier responses in a task dependency graph
 /// </remarks>
 public partial class OpenAIService : IDisposable
 {
@@ -63,14 +126,23 @@ public partial class OpenAIService : IDisposable
     // HttpClient for code generation instead of OpenAI SDK to allow direct control over
     // the HTTP request/response for the gpt-5.1-codex model, which requires specific
     // settings and payload structure for optimal code generation performance.
+    // Timeout is set to 300 seconds to accommodate complex code generation requests.
     private static readonly HttpClient _sharedCodeGenHttpClient = new HttpClient
     {
-        BaseAddress = new Uri("https://api.openai.com/v1/")
+        BaseAddress = new Uri("https://api.openai.com/v1/"),
+        Timeout = TimeSpan.FromSeconds(300)
     };
     private readonly string _apiKey;
     private readonly string _codeGenModel = "gpt-5.1-codex";
     private const int MaxRetries = 3;
     private bool _disposed = false;
+    
+    /// <summary>
+    /// Stores response IDs for chaining requests (task ID -> response ID).
+    /// This allows subsequent code generation requests to maintain context by referencing
+    /// previous responses, improving coherence across dependent tasks.
+    /// </summary>
+    private readonly Dictionary<string, string> _responseChain = new Dictionary<string, string>();
     
     // Regex for validating semantic version format - compiled once for efficiency
     private static readonly System.Text.RegularExpressions.Regex VersionRegex = 
@@ -89,9 +161,38 @@ public partial class OpenAIService : IDisposable
     }
 
     /// <summary>
-    /// Helper method to call OpenAI Chat Completion API using HttpClient for code generation.
+    /// Helper method to call OpenAI Responses API using HttpClient for code generation with gpt-5.1-codex.
+    /// Supports response chaining via previous_response_id for context continuity.
     /// </summary>
-    private async Task<string> CallCodeGenChatCompletionAsync(List<ChatMessage> messages)
+    /// <param name="messages">The list of chat messages to send to the API.</param>
+    /// <param name="previousResponseId">Optional response ID from a previous request to maintain context continuity.</param>
+    /// <returns>A tuple containing the response ID (for potential chaining) and the generated text content.</returns>
+    /// <remarks>
+    /// This method uses the OpenAI Responses API endpoint (/v1/responses) which provides:
+    /// - Server-side storage of responses for later retrieval (store: true)
+    /// - Response chaining through previous_response_id parameter
+    /// - Structured output format with message roles and content types
+    /// 
+    /// Response chaining allows the model to maintain context from previous interactions,
+    /// which is particularly useful when generating dependent code or iterating on previous outputs.
+    /// The response ID can be used in subsequent calls to this method to maintain conversation history.
+    /// 
+    /// Example usage:
+    /// <code>
+    /// // First request
+    /// var (id1, code1) = await CallCodexResponsesAsync(messages1);
+    /// 
+    /// // Second request that chains from the first
+    /// var (id2, code2) = await CallCodexResponsesAsync(messages2, id1);
+    /// </code>
+    /// </remarks>
+    /// <exception cref="ArgumentNullException">Thrown when messages is null.</exception>
+    /// <exception cref="ArgumentException">Thrown when messages collection is empty.</exception>
+    /// <exception cref="HttpRequestException">Thrown when the API request fails or returns an error.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when the API response is invalid or missing required data.</exception>
+    private async Task<(string Id, string Text)> CallCodexResponsesAsync(
+        List<ChatMessage> messages, 
+        string? previousResponseId = null)
     {
         if (messages == null)
         {
@@ -108,7 +209,9 @@ public partial class OpenAIService : IDisposable
             var requestBody = new
             {
                 model = _codeGenModel,
-                messages = messages.Select(m => new
+                store = true,
+                previous_response_id = previousResponseId,
+                input = messages.Select(m => new
                 {
                     role = m switch
                     {
@@ -127,10 +230,13 @@ public partial class OpenAIService : IDisposable
                 }).ToList()
             };
 
-            var jsonContent = JsonConvert.SerializeObject(requestBody);
+            var jsonContent = JsonConvert.SerializeObject(requestBody, new JsonSerializerSettings 
+            { 
+                NullValueHandling = NullValueHandling.Ignore 
+            });
             using var httpContent = new StringContent(jsonContent, Encoding.UTF8, "application/json");
 
-            using var requestMessage = new HttpRequestMessage(HttpMethod.Post, "chat/completions");
+            using var requestMessage = new HttpRequestMessage(HttpMethod.Post, "responses");
             requestMessage.Content = httpContent;
             requestMessage.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _apiKey);
             requestMessage.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
@@ -144,7 +250,7 @@ public partial class OpenAIService : IDisposable
 
                 try
                 {
-                    var errorResponse = JsonConvert.DeserializeObject<ChatCompletionResponse>(responseBody);
+                    var errorResponse = JsonConvert.DeserializeObject<CodexResponse>(responseBody);
                     var apiError = errorResponse?.Error;
                     if (apiError != null)
                     {
@@ -178,23 +284,41 @@ public partial class OpenAIService : IDisposable
                 throw new HttpRequestException(errorMessage);
             }
 
-            var result = JsonConvert.DeserializeObject<ChatCompletionResponse>(responseBody);
+            var result = JsonConvert.DeserializeObject<CodexResponse>(responseBody);
 
-            if (result == null || result.Choices == null || result.Choices.Count == 0)
+            if (result == null || string.IsNullOrEmpty(result.Id))
             {
-                throw new InvalidOperationException("OpenAI API returned no choices in response.");
+                throw new InvalidOperationException("OpenAI API returned no response ID.");
             }
 
-            string? content = result.Choices[0]?.Message?.Content;
-            return content ?? throw new InvalidOperationException("OpenAI API returned null content.");
+            // Extract assistant text from output
+            string text = "";
+            if (result.Output != null)
+            {
+                foreach (var item in result.Output)
+                {
+                    if (item.Type == "message" && item.Role == "assistant" && item.Content != null)
+                    {
+                        foreach (var part in item.Content)
+                        {
+                            if (part.Type == "output_text" && !string.IsNullOrEmpty(part.Text))
+                            {
+                                text += part.Text;
+                            }
+                        }
+                    }
+                }
+            }
+
+            return (result.Id, text);
         }
         catch (JsonException ex)
         {
-            throw new HttpRequestException("Error serializing or deserializing OpenAI code generation request/response.", ex);
+            throw new HttpRequestException("Error serializing or deserializing OpenAI codex request/response.", ex);
         }
         catch (InvalidOperationException ex)
         {
-            throw new HttpRequestException("Received an invalid OpenAI code generation response.", ex);
+            throw new HttpRequestException("Received an invalid OpenAI codex response.", ex);
         }
     }
 

@@ -6,12 +6,36 @@ namespace AoTEngine.Services;
 
 /// <summary>
 /// Partial class containing code generation and regeneration methods.
+/// All code generation uses the gpt-5.1-codex model via the OpenAI Responses API with response chaining support.
 /// </summary>
+/// <remarks>
+/// Response Chaining Strategy:
+/// - For initial code generation, chains from the last dependency's response (if available)
+/// - For regeneration, chains from the task's own previous generation to maintain context
+/// - Response IDs are stored in _responseChain dictionary for future reference
+/// 
+/// This approach ensures that:
+/// - Dependent tasks have access to the full context of their dependencies
+/// - Error correction maintains awareness of the original generation context
+/// - The model can build upon previous outputs rather than starting fresh each time
+/// </remarks>
 public partial class OpenAIService
 {
     /// <summary>
-    /// Generates code for a specific task.
+    /// Generates code for a specific task using the gpt-5.1-codex model with response chaining.
     /// </summary>
+    /// <param name="task">The task node containing generation requirements.</param>
+    /// <param name="completedTasks">Dictionary of completed tasks that this task may depend on.</param>
+    /// <returns>The generated C# code as a string.</returns>
+    /// <remarks>
+    /// Response Chaining Behavior:
+    /// If the task has dependencies, this method attempts to chain from the last dependency's
+    /// response ID. This provides the model with implicit context about dependent types and
+    /// implementations, improving code quality and reducing type mismatches.
+    /// 
+    /// The generated code's response ID is stored for potential use by dependent tasks or
+    /// future regeneration attempts.
+    /// </remarks>
     public async Task<string> GenerateCodeAsync(TaskNode task, Dictionary<string, TaskNode> completedTasks)
     {
         var contextBuilder = new System.Text.StringBuilder();
@@ -26,6 +50,18 @@ public partial class OpenAIService
         if (task.ExpectedTypes.Any())
         {
             contextBuilder.AppendLine($"Expected Types to Generate: {string.Join(", ", task.ExpectedTypes)}");
+        }
+
+        // Determine if we can chain from a previous response
+        string? previousResponseId = null;
+        if (task.Dependencies.Any())
+        {
+            // Try to chain from the last dependency's response
+            var lastDep = task.Dependencies.LastOrDefault(depId => _responseChain.ContainsKey(depId));
+            if (lastDep != null)
+            {
+                previousResponseId = _responseChain[lastDep];
+            }
         }
 
         // Include outputs from dependent tasks
@@ -68,8 +104,13 @@ public partial class OpenAIService
                     new UserChatMessage(userPrompt)
                 };
 
-                // Use HttpClient for code generation
-                var generatedCode = (await CallCodeGenChatCompletionAsync(messages)).Trim();
+                // Use Codex Responses API with chaining
+                var (responseId, generatedCode) = await CallCodexResponsesAsync(messages, previousResponseId);
+                
+                // Store response ID for potential chaining
+                _responseChain[task.Id] = responseId;
+                
+                generatedCode = generatedCode.Trim();
                 
                 // Extract and store type contract after generation
                 task.TypeContract = ExtractTypeContract(generatedCode);
@@ -91,11 +132,27 @@ public partial class OpenAIService
     /// Regenerates code with validation errors as feedback using the "Code Repair Expert" pattern.
     /// Provides the LLM with original intent, failed code, error log, and suggestions for targeted repairs.
     /// Filters out namespace and type not found errors as these will be resolved in batch validation.
+    /// Uses response chaining to maintain context from the original generation.
     /// </summary>
     /// <param name="task">The task to regenerate code for.</param>
     /// <param name="validationResult">Validation errors and warnings.</param>
     /// <param name="suggestions">Optional list of suggestions for fixing the code.</param>
     /// <param name="existingTypeCode">Optional code from existing types that should be reused instead of regenerated.</param>
+    /// <returns>The regenerated C# code as a string.</returns>
+    /// <remarks>
+    /// Response Chaining for Regeneration:
+    /// This method chains from the task's original generation response (if available), allowing
+    /// the model to understand the original context and intent. This improves the quality of
+    /// error corrections by maintaining awareness of why certain decisions were made initially.
+    /// 
+    /// Error Filtering:
+    /// Namespace and type-related errors are filtered out as they are expected to be resolved
+    /// during batch validation when all types are available. This prevents unnecessary regeneration
+    /// cycles for errors that will self-resolve.
+    /// 
+    /// The method updates the task's response ID after successful regeneration, allowing future
+    /// iterations to chain from the corrected version.
+    /// </remarks>
     public async Task<string> RegenerateCodeWithErrorsAsync(
         TaskNode task, 
         ValidationResult validationResult,
@@ -121,6 +178,9 @@ public partial class OpenAIService
         var warningsText = string.Join("\n", validationResult.Warnings);
         var suggestionsText = allSuggestions.Any() ? string.Join("\n", allSuggestions.Select((s, i) => $"{i + 1}. {s}")) : "";
 
+        // Get previous response ID for chaining (maintains context from original generation)
+        string? previousResponseId = _responseChain.ContainsKey(task.Id) ? _responseChain[task.Id] : null;
+
         for (int attempt = 0; attempt < MaxRetries; attempt++)
         {
             try
@@ -144,8 +204,13 @@ public partial class OpenAIService
                     new UserChatMessage(userPrompt)
                 };
 
-                // Use HttpClient for code regeneration
-                var regeneratedCode = (await CallCodeGenChatCompletionAsync(messages)).Trim();
+                // Use Codex Responses API with chaining
+                var (responseId, regeneratedCode) = await CallCodexResponsesAsync(messages, previousResponseId);
+                
+                // Update response ID for this task
+                _responseChain[task.Id] = responseId;
+                
+                regeneratedCode = regeneratedCode.Trim();
                 
                 // Update type contract after regeneration
                 task.TypeContract = ExtractTypeContract(regeneratedCode);
