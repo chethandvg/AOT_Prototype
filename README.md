@@ -8,8 +8,9 @@ The AoT Engine is a sophisticated C# application that leverages OpenAI's GPT mod
 ## 📚 Documentation
 
 - **[README.md](README.md)** - This file: Project overview and quick start guide
-- **[ARCHITECTURE.md](ARCHITECTURE.md)** - Detailed system architecture and technical design
+- **[QUICK_START_MODULES.md](QUICK_START_MODULES.md)** - Quick start guide for using individual modules
 - **[MODULAR_ARCHITECTURE.md](MODULAR_ARCHITECTURE.md)** - Modular architecture guide and custom workflow examples
+- **[ARCHITECTURE.md](ARCHITECTURE.md)** - Detailed system architecture and technical design
 - **[USAGE.md](USAGE.md)** - Comprehensive usage examples and scenarios
 - **[CHANGELOG.md](CHANGELOG.md)** - Complete feature reference and version history
 
