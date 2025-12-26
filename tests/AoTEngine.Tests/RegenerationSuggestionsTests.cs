@@ -28,7 +28,8 @@ public class RegenerationSuggestionsTests
 
         // Assert
         Assert.NotNull(suggestions);
-        Assert.Contains(suggestions, s => s.Contains("Execute") || s.Contains("MyClass"));
+        // Use AND conditions for stricter validation - suggestion should contain both the member and type names
+        Assert.Contains(suggestions, s => s.Contains("Execute") && s.Contains("MyClass"));
     }
 
     [Fact]
@@ -50,7 +51,8 @@ public class RegenerationSuggestionsTests
 
         // Assert
         Assert.NotNull(suggestions);
-        Assert.Contains(suggestions, s => s.Contains("Implement") || s.Contains("IService"));
+        // Use AND conditions for stricter validation - suggestion should contain both interface name and action
+        Assert.Contains(suggestions, s => s.Contains("Implement") && s.Contains("IService"));
     }
 
     [Fact]
@@ -72,7 +74,8 @@ public class RegenerationSuggestionsTests
 
         // Assert
         Assert.NotNull(suggestions);
-        Assert.Contains(suggestions, s => s.Contains("Convert") || s.Contains("type"));
+        // Check for conversion suggestion with both type names
+        Assert.Contains(suggestions, s => s.Contains("string") && s.Contains("int"));
     }
 
     [Fact]
@@ -119,24 +122,7 @@ public class RegenerationSuggestionsTests
     [Fact]
     public void RegenerateCodeWithErrorsAsync_AcceptsOptionalSuggestions()
     {
-        // Arrange
-        var openAIService = new OpenAIService("test-key");
-        var task = new TaskNode
-        {
-            Id = "task1",
-            Description = "Test task",
-            GeneratedCode = "public class Test { }"
-        };
-        
-        var validationResult = new ValidationResult
-        {
-            IsValid = false,
-            Errors = new List<string> { "Test error" }
-        };
-        
-        var suggestions = new List<string> { "Try adding the missing method" };
-
-        // Act & Assert - Just verify the method signature accepts the new parameters
+        // Act & Assert - Verify the method signature accepts the new parameters
         // Actual API call would require valid API key
         var method = typeof(OpenAIService).GetMethod("RegenerateCodeWithErrorsAsync");
         Assert.NotNull(method);

@@ -253,7 +253,8 @@ public partial class OpenAIService
             }
             
             // Suggestion for wrong number of arguments
-            if (errorLower.Contains("no overload for method") || errorLower.Contains("takes") && errorLower.Contains("arguments"))
+            // Use explicit parentheses for operator precedence clarity
+            if (errorLower.Contains("no overload for method") || (errorLower.Contains("takes") && errorLower.Contains("arguments")))
             {
                 suggestions.Add("Check the method signature and provide the correct number and types of arguments");
             }

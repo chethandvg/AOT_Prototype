@@ -102,12 +102,13 @@ public partial class ParallelExecutionEngine
         // Extract types defined in this task
         var taskTypes = ExtractDefinedTypes(task.GeneratedCode);
         
-        // Check against all completed tasks
-        foreach (var completedTask in completedTasks.Values.Where(t => t.Id != task.Id))
+        // Check against all completed tasks - filter explicitly with Where clause
+        var otherCompletedTasks = completedTasks.Values
+            .Where(t => t.Id != task.Id && !string.IsNullOrWhiteSpace(t.GeneratedCode))
+            .ToList();
+        
+        foreach (var completedTask in otherCompletedTasks)
         {
-            if (string.IsNullOrWhiteSpace(completedTask.GeneratedCode))
-                continue;
-            
             var existingTypes = ExtractDefinedTypes(completedTask.GeneratedCode);
             
             // Find overlapping type names
@@ -171,7 +172,8 @@ public partial class ParallelExecutionEngine
         
         // Extract type definitions
         // Note: Uses regex for quick analysis. For production use, consider Roslyn syntax trees for more accurate parsing.
-        var typePattern = @"(?:public|internal|private|protected)?\s*(?:abstract|sealed|partial|static)?\s*(?:class|interface|enum|struct|record)\s+([A-Z][a-zA-Z0-9_]+)(?:<[^>]+>)?(?:\s*:\s*[^{]+)?\s*\{";
+        // Pattern uses permissive identifier matching [A-Za-z_][A-Za-z0-9_]* to match all valid C# type names
+        var typePattern = @"(?:public|internal|private|protected)?\s*(?:abstract|sealed|partial|static)?\s*(?:class|interface|enum|struct|record)\s+([A-Za-z_][A-Za-z0-9_]*)(?:<[^>]+>)?(?:\s*:\s*[^{]+)?\s*\{";
         var typeMatches = System.Text.RegularExpressions.Regex.Matches(code, typePattern);
         
         foreach (System.Text.RegularExpressions.Match match in typeMatches)
@@ -264,9 +266,11 @@ public partial class ParallelExecutionEngine
         var props2 = ExtractPropertySignatures(code2);
         
         // Find methods with same name but different signatures
+        // Filter methods2 explicitly before iterating
         foreach (var method1 in methods1)
         {
-            foreach (var method2 in methods2.Where(m => m.name == method1.name))
+            var matchingMethods = methods2.Where(m => m.name == method1.name).ToList();
+            foreach (var method2 in matchingMethods)
             {
                 if (method1.signature != method2.signature)
                 {
@@ -276,9 +280,11 @@ public partial class ParallelExecutionEngine
         }
         
         // Find properties with same name but different types
+        // Filter props2 explicitly before iterating
         foreach (var prop1 in props1)
         {
-            foreach (var prop2 in props2.Where(p => p.name == prop1.name))
+            var matchingProps = props2.Where(p => p.name == prop1.name).ToList();
+            foreach (var prop2 in matchingProps)
             {
                 if (prop1.type != prop2.type)
                 {
@@ -299,6 +305,7 @@ public partial class ParallelExecutionEngine
         var methods = new List<(string name, string signature)>();
         
         // Simplified pattern - matches most common method declarations
+        // Note: Constructors don't have a return type, so they won't match this pattern
         var pattern = @"(?:public|private|protected|internal)\s+(?:static\s+)?(?:async\s+)?(?:virtual\s+)?(?:override\s+)?(?:abstract\s+)?(\S+)\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(([^)]*)\)";
         var matches = System.Text.RegularExpressions.Regex.Matches(code, pattern);
         
@@ -308,12 +315,7 @@ public partial class ParallelExecutionEngine
             var name = match.Groups[2].Value;
             var parameters = match.Groups[3].Value.Trim();
             
-            // Skip constructors - constructor names match the return type (which would be the class name)
-            // This is the primary check for constructors
-            if (returnType != name)
-            {
-                methods.Add((name, $"{returnType} {name}({parameters})"));
-            }
+            methods.Add((name, $"{returnType} {name}({parameters})"));
         }
         
         return methods;
@@ -322,12 +324,13 @@ public partial class ParallelExecutionEngine
     /// <summary>
     /// Extracts property signatures from code.
     /// Note: Uses regex for quick analysis. For production use, consider Roslyn syntax trees.
+    /// Pattern uses permissive identifier matching to detect all property definitions.
     /// </summary>
     private List<(string name, string type)> ExtractPropertySignatures(string code)
     {
         var props = new List<(string name, string type)>();
         
-        var pattern = @"(?:public|private|protected|internal)\s+(?:static\s+)?(?:virtual\s+)?(?:override\s+)?(\S+)\s+([A-Z][A-Za-z0-9_]*)\s*\{\s*get";
+        var pattern = @"(?:public|private|protected|internal)\s+(?:static\s+)?(?:virtual\s+)?(?:override\s+)?(\S+)\s+([A-Za-z_][A-Za-z0-9_]*)\s*\{\s*get";
         var matches = System.Text.RegularExpressions.Regex.Matches(code, pattern);
         
         foreach (System.Text.RegularExpressions.Match match in matches)
