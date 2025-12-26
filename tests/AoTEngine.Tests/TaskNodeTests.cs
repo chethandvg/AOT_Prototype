@@ -69,4 +69,41 @@ public class TaskNodeTests
         Assert.Equal(2, task.ValidationAttemptCount);
         Assert.Equal(now, task.SummaryGeneratedAtUtc);
     }
+
+    [Fact]
+    public void TaskNode_ShouldSetDocumentationStatus()
+    {
+        // Arrange & Act - Draft status
+        var draftTask = new TaskNode
+        {
+            Id = "task1",
+            Summary = "Implements the Test class",
+            DocumentationStatus = "draft"
+        };
+
+        // Assert
+        Assert.Equal("draft", draftTask.DocumentationStatus);
+
+        // Arrange & Act - Final status
+        var finalTask = new TaskNode
+        {
+            Id = "task2",
+            Summary = "Implements the Helper class",
+            DocumentationStatus = "final"
+        };
+
+        // Assert
+        Assert.Equal("final", finalTask.DocumentationStatus);
+    }
+
+    [Fact]
+    public void TaskNode_DocumentationStatus_DefaultsToEmptyString()
+    {
+        // Arrange & Act
+        var task = new TaskNode();
+
+        // Assert
+        Assert.NotNull(task.DocumentationStatus);
+        Assert.Empty(task.DocumentationStatus);
+    }
 }

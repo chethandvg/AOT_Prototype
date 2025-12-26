@@ -363,4 +363,182 @@ public class CheckpointServiceTests
             }
         }
     }
+
+    [Fact]
+    public async Task SaveCheckpointAsync_PreservesValidationErrors()
+    {
+        // Arrange
+        var tempDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
+        Directory.CreateDirectory(tempDir);
+        
+        try
+        {
+            var checkpointService = new CheckpointService(tempDir);
+            var validationErrors = new List<string> 
+            { 
+                "CS0246: The type or namespace name 'IService' could not be found",
+                "CS1061: 'MyClass' does not contain a definition for 'Execute'" 
+            };
+            
+            var tasks = new List<TaskNode>
+            {
+                new TaskNode
+                {
+                    Id = "task1",
+                    Description = "Task with validation errors",
+                    IsCompleted = true,
+                    IsValidated = false,
+                    GeneratedCode = "public class Test { }",
+                    ValidationErrors = validationErrors
+                }
+            };
+            
+            var completedTaskIds = new HashSet<string> { "task1" };
+            
+            // Act
+            var checkpointPath = await checkpointService.SaveCheckpointAsync(
+                tasks,
+                completedTaskIds,
+                "Test validation errors",
+                "Test description");
+            
+            // Assert
+            var checkpoint = await checkpointService.LoadCheckpointAsync(checkpointPath!);
+            Assert.NotNull(checkpoint);
+            Assert.Single(checkpoint.CompletedTaskDetails);
+            
+            var taskDetail = checkpoint.CompletedTaskDetails[0];
+            Assert.NotNull(taskDetail.ValidationErrors);
+            Assert.Equal(2, taskDetail.ValidationErrors.Count);
+            Assert.Contains("CS0246", taskDetail.ValidationErrors[0]);
+            Assert.Contains("CS1061", taskDetail.ValidationErrors[1]);
+        }
+        finally
+        {
+            // Cleanup
+            if (Directory.Exists(tempDir))
+            {
+                Directory.Delete(tempDir, true);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task SaveCheckpointAsync_PreservesDocumentationStatus()
+    {
+        // Arrange
+        var tempDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
+        Directory.CreateDirectory(tempDir);
+        
+        try
+        {
+            var checkpointService = new CheckpointService(tempDir);
+            
+            var tasks = new List<TaskNode>
+            {
+                new TaskNode
+                {
+                    Id = "task1",
+                    Description = "Task with draft documentation",
+                    IsCompleted = true,
+                    IsValidated = false,
+                    GeneratedCode = "public class Test { }",
+                    Summary = "Implements the Test class",
+                    DocumentationStatus = "draft"
+                },
+                new TaskNode
+                {
+                    Id = "task2",
+                    Description = "Task with final documentation",
+                    IsCompleted = true,
+                    IsValidated = true,
+                    GeneratedCode = "public class Helper { }",
+                    Summary = "Helper class for operations",
+                    DocumentationStatus = "final"
+                }
+            };
+            
+            var completedTaskIds = new HashSet<string> { "task1", "task2" };
+            
+            // Act
+            var checkpointPath = await checkpointService.SaveCheckpointAsync(
+                tasks,
+                completedTaskIds,
+                "Test documentation status",
+                "Test description");
+            
+            // Assert
+            var checkpoint = await checkpointService.LoadCheckpointAsync(checkpointPath!);
+            Assert.NotNull(checkpoint);
+            Assert.Equal(2, checkpoint.CompletedTaskDetails.Count);
+            
+            var draftTask = checkpoint.CompletedTaskDetails.First(t => t.TaskId == "task1");
+            var finalTask = checkpoint.CompletedTaskDetails.First(t => t.TaskId == "task2");
+            
+            Assert.Equal("draft", draftTask.DocumentationStatus);
+            Assert.Equal("Implements the Test class", draftTask.Summary);
+            Assert.Equal("final", finalTask.DocumentationStatus);
+            Assert.Equal("Helper class for operations", finalTask.Summary);
+        }
+        finally
+        {
+            // Cleanup
+            if (Directory.Exists(tempDir))
+            {
+                Directory.Delete(tempDir, true);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task SaveCheckpointAsync_HandlesEmptyValidationErrors()
+    {
+        // Arrange
+        var tempDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
+        Directory.CreateDirectory(tempDir);
+        
+        try
+        {
+            var checkpointService = new CheckpointService(tempDir);
+            
+            var tasks = new List<TaskNode>
+            {
+                new TaskNode
+                {
+                    Id = "task1",
+                    Description = "Task with null validation errors",
+                    IsCompleted = true,
+                    IsValidated = true,
+                    GeneratedCode = "public class Test { }",
+                    // ValidationErrors defaults to empty list
+                }
+            };
+            
+            var completedTaskIds = new HashSet<string> { "task1" };
+            
+            // Act
+            var checkpointPath = await checkpointService.SaveCheckpointAsync(
+                tasks,
+                completedTaskIds,
+                "Test empty errors",
+                "Test description");
+            
+            // Assert
+            var checkpoint = await checkpointService.LoadCheckpointAsync(checkpointPath!);
+            Assert.NotNull(checkpoint);
+            Assert.Single(checkpoint.CompletedTaskDetails);
+            
+            var taskDetail = checkpoint.CompletedTaskDetails[0];
+            Assert.NotNull(taskDetail.ValidationErrors);
+            Assert.Empty(taskDetail.ValidationErrors);
+        }
+        finally
+        {
+            // Cleanup
+            if (Directory.Exists(tempDir))
+            {
+                Directory.Delete(tempDir, true);
+            }
+        }
+    }
 }
