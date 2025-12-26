@@ -191,7 +191,7 @@ This is your LAST CHANCE. Apply surgical precision to repair this code.";
 
     /// <summary>
     /// Gets the user prompt for code regeneration with the "Code Repair Expert" pattern.
-    /// Structures the prompt with three clear sections: Original Intent, Failed Code, Error Log.
+    /// Structures the prompt with sections: Original Intent, Failed Code, Error Log, Suggestions, Existing Types.
     /// </summary>
     /// <param name="taskDescription">Original task description (the intent).</param>
     /// <param name="taskNamespace">Target namespace for the task.</param>
@@ -199,6 +199,8 @@ This is your LAST CHANCE. Apply surgical precision to repair this code.";
     /// <param name="code">The failed code to repair.</param>
     /// <param name="errorsText">Validation errors.</param>
     /// <param name="warningsText">Validation warnings.</param>
+    /// <param name="suggestionsText">Suggestions for fixing the code.</param>
+    /// <param name="existingTypeCode">Code from existing types that should be reused.</param>
     /// <param name="attempt">Current attempt number.</param>
     private string GetCodeRegenerationUserPrompt(
         string taskDescription, 
@@ -206,11 +208,39 @@ This is your LAST CHANCE. Apply surgical precision to repair this code.";
         List<string> expectedTypes,
         string code, 
         string errorsText, 
-        string warningsText, 
+        string warningsText,
+        string suggestionsText,
+        string? existingTypeCode,
         int attempt)
     {
         var expectedTypesStr = expectedTypes.Any() ? string.Join(", ", expectedTypes) : "Not specified";
         var namespaceStr = !string.IsNullOrEmpty(taskNamespace) ? taskNamespace : "Not specified";
+        
+        // Build suggestions section if available
+        var suggestionsSection = !string.IsNullOrWhiteSpace(suggestionsText) 
+            ? $@"
+
+=== INPUT 4: SUGGESTIONS (Recommended Fixes) ===
+{suggestionsText}
+" 
+            : "";
+        
+        // Build existing types section if available (for duplicate type handling)
+        var existingTypesSection = !string.IsNullOrWhiteSpace(existingTypeCode)
+            ? $@"
+
+=== INPUT 5: EXISTING TYPES (REUSE This Code - Do NOT Recreate) ===
+⚠️ IMPORTANT: The following types already exist in other tasks. You MUST reuse them instead of creating new definitions.
+- Do NOT redefine these types
+- Only ADD new functionality if needed (extend, don't replace)
+- Reference these types directly in your code
+- If you need to add members, ensure they don't conflict with existing ones
+
+```csharp
+{existingTypeCode}
+```
+"
+            : "";
         
         if (attempt < 2) // Attempts 0 and 1
         {
@@ -235,7 +265,7 @@ Expected Types: {expectedTypesStr}
 ```
 {warningsText}
 ```
-
+{suggestionsSection}{existingTypesSection}
 === INSTRUCTIONS ===
 Analyze the Error Log and modify the Failed Code to fix these SPECIFIC issues:
 - Maintain the ORIGINAL INTENT as described above
@@ -244,6 +274,8 @@ Analyze the Error Log and modify the Failed Code to fix these SPECIFIC issues:
 - Preserve the original code structure and design
 - Ensure all using statements are present
 - Verify namespace and type names are correct
+- If EXISTING TYPES are provided, REUSE them - do not recreate
+- Follow the SUGGESTIONS if provided
 
 Return ONLY the corrected C# code without any markdown formatting or explanations.";
         }
@@ -270,7 +302,7 @@ Expected Types: {expectedTypesStr}
 ```
 {warningsText}
 ```
-
+{suggestionsSection}{existingTypesSection}
 === SYSTEMATIC REPAIR APPROACH ===
 For EACH error in the Error Log:
 1. Read the error message carefully
@@ -288,6 +320,8 @@ For EACH error in the Error Log:
 ☐ Access modifiers appropriate?
 ☐ No typos in member names?
 ☐ All dependencies correctly referenced?
+☐ Existing types reused (not recreated)?
+☐ Suggestions followed where applicable?
 
 === CRITICAL REMINDER ===
 - This code has failed validation {attempt + 1} times
@@ -295,6 +329,7 @@ For EACH error in the Error Log:
 - Make MINIMAL changes - don't rewrite unnecessarily  
 - The repaired code MUST compile and validate successfully
 - Previous repair attempts were insufficient - be MORE THOROUGH
+- If EXISTING TYPES are provided, you MUST use them - do NOT recreate
 
 Generate the COMPLETELY REPAIRED code now. Return ONLY the corrected C# code without any markdown formatting or explanations.";
         }
