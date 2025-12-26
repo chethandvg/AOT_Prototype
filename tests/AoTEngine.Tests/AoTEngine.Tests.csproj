@@ -1,10 +1,11 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net9.0</TargetFramework>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>enable</Nullable>
+    <!-- Test project-specific settings -->
     <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <RootNamespace>AoTEngine.Tests</RootNamespace>
+    <AssemblyName>AoTEngine.Tests</AssemblyName>
   </PropertyGroup>
 
   <ItemGroup>

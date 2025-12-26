@@ -1,102 +1,84 @@
-# Models Folder
+# Models Layer
 
 This folder contains the data models and DTOs used throughout the AoT Engine.
 
+## Overview
+
+| Category | Files | Purpose |
+|----------|-------|---------|
+| **Task Execution** | `TaskNode.cs`, `ValidationResult.cs` | Core task and validation models |
+| **Decomposition** | `TaskDecompositionRequest.cs`, `TaskDecompositionResponse.cs`, `TaskDecompositionStrategy.cs` | Task decomposition workflow |
+| **Documentation** | `ProjectDocumentation.cs`, `TaskSummaryRecord.cs`, `CheckpointData.cs` | Documentation and checkpoints |
+| **Type Tracking** | `TypeRegistry.cs`, `SymbolTable.cs` | Symbol and type management |
+| **Contracts** | `ContractCatalog.cs` | Contract-first generation |
+| **Complexity** | `ComplexityMetrics.cs` | Task complexity analysis |
+
 ## Components
 
-### TaskNode
-Represents an atomic task in the task decomposition graph.
+### Task Execution Models
 
-**Files:**
-- `TaskNode.cs` - Task node model with properties for dependencies, generated code, validation state
+**TaskNode** (`TaskNode.cs`)
+- Represents an atomic task in the task decomposition graph
+- Properties: Id, Description, Dependencies, GeneratedCode, ValidationStatus
+- Tracks completion status, retry count, validation errors
 
-### ValidationResult
-Result of code validation operations.
+**ValidationResult** (`ValidationResult.cs`)
+- Result of code validation operations
+- Properties: IsValid, Errors, Warnings
 
-**Files:**
-- `ValidationResult.cs` - Validation result with errors and warnings
+### Decomposition Models
 
-### TaskDecomposition Models
-Models for task decomposition requests and responses.
+**TaskDecompositionRequest** (`TaskDecompositionRequest.cs`)
+- Request model for task decomposition
+- Properties: OriginalRequest, Context
 
-**Files:**
-- `TaskDecompositionRequest.cs` - Request model for task decomposition
-- `TaskDecompositionResponse.cs` - Response model with decomposed tasks
+**TaskDecompositionResponse** (`TaskDecompositionResponse.cs`)
+- Response model with decomposed tasks
+- Properties: Description, Tasks
+
+**TaskDecompositionStrategy** (`TaskDecompositionStrategy.cs`)
+- Decomposition strategy for complex tasks
+- Types: Functional, PartialClass, InterfaceBased, LayerBased
 
 ### Documentation Models
-Models for documentation generation.
 
-**Files:**
-- `ProjectDocumentation.cs` - Complete project documentation
-- `TaskSummaryRecord.cs` - Individual task summary record
+**ProjectDocumentation** (`ProjectDocumentation.cs`)
+- Complete project documentation container
+- Properties: ProjectRequest, Description, TaskRecords, ModuleIndex
 
-### Type Registry and Symbol Table
-Models for tracking types and symbols during code integration.
+**TaskSummaryRecord** (`TaskSummaryRecord.cs`)
+- Structured summary for each task
+- Properties: TaskId, Purpose, KeyBehaviors, EdgeCases, ValidationNotes
 
-**Files:**
-- `TypeRegistry.cs` - Registry for tracking types across tasks:
-  - `TypeRegistryEntry` - Type definition metadata
-  - `MemberSignature` - Member signature for conflict detection
-  - `TypeConflict` - Conflict information
-  - `TypeRegistry` - Central registry class
-- `SymbolTable.cs` - Project-wide symbol tracking (ENHANCED):
-  - `ProjectSymbolInfo` - Symbol information with FQN, namespace, kind
-  - `SymbolTable` - Symbol lookup, tracking, and collision detection
-  - `TypeDefinitionMetadata` - Metadata for structured output
-  - `SymbolCollision` - Collision information between symbols (NEW)
-  - `SymbolCollisionType` - Enum: DuplicateDefinition, AmbiguousName, MisplacedModel (NEW)
-  - `GetSymbolsBySimpleName()` - Find types by simple name for ambiguity detection (NEW)
-  - `IsAmbiguous()` - Check if a simple name is ambiguous (NEW)
-  - `ValidateNamespaceConventions()` - Enforce DTOs in .Models namespace (NEW)
-  - `GetSuggestedAlias()` - Generate using alias for ambiguous types (NEW)
-  - `GenerateUsingAliases()` - Generate all using aliases for collisions (NEW)
+**CheckpointData** (`CheckpointData.cs`)
+- Checkpoint snapshot structure for progress tracking
 
-### Contract Catalog Models (NEW)
-Models for frozen API contracts in Contract-First generation.
+### Type Tracking Models
 
-**Files:**
-- `ContractCatalog.cs` - Frozen contract definitions container:
-  - `ContractCatalog` - Container with Enums, Interfaces, Models, AbstractClasses collections
-    - `Freeze()` - Lock contracts after generation
-    - `ContainsType()` - Check if type exists in contracts
-    - `GetContract()` - Get contract by name
-    - `GetAllContracts()` - Get all contracts
-  - `EnumContract` - Enum definition with members and values
-    - `Members` - List of enum members with optional values
-    - `IsFlags` - Whether enum is a flags enum
-    - `GenerateCode()` - Produces valid C# enum
-  - `InterfaceContract` - Interface with methods, properties, type constraints
-    - `Methods` - List of method signatures
-    - `Properties` - List of property signatures
-    - `BaseInterfaces` - Inherited interfaces
-    - `TypeParameters` - Generic type parameters
-    - `TypeConstraints` - Generic constraints
-    - `GenerateCode()` - Produces valid C# interface
-  - `ModelContract` - DTO/Model class definition
-    - `Properties` - List of property definitions
-    - `IsRecord` - Whether to generate record instead of class
-    - `BaseClass` - Base class if any
-    - `GenerateCode()` - Produces valid C# class/record
+**TypeRegistry** (`TypeRegistry.cs`)
+- Central registry for tracking types across tasks
+- Detects duplicate type definitions and member conflicts
+- Resolution strategies: KeepFirst, MergeAsPartial, RemoveDuplicate, FailFast
+
+**SymbolTable** (`SymbolTable.cs`)
+- Project-wide symbol tracking with collision detection
+- Methods: `GetSymbolsBySimpleName()`, `IsAmbiguous()`, `ValidateNamespaceConventions()`
+
+### Contract Catalog Models
+
+**ContractCatalog** (`ContractCatalog.cs`)
+- Frozen contract definitions container with:
+  - `EnumContract` - Enum definitions with members
+  - `InterfaceContract` - Interface with methods, properties
+  - `ModelContract` - DTO/Model class definitions
   - `AbstractClassContract` - Abstract class with abstract/virtual methods
-    - `AbstractMethods` - Methods requiring override
-    - `VirtualMethods` - Methods with default implementation
-    - `IsSealed` - If true, generates sealed class (not abstract)
-    - `GenerateCode()` - Produces valid C# abstract class
-  - `MethodSignatureContract` - Method signature for interfaces/abstract classes
-  - `PropertySignatureContract` - Property signature with getter/setter info
-  - `ParameterContract` - Method parameter with name, type, default value
-
-### Configuration Models
-Configuration models for services.
-
-**Files:**
-- `AssemblyMappingConfig.cs` - Assembly mapping configuration
+  - Each contract includes `GenerateCode()` for C# source generation
 
 ### Complexity Models
-Models for task complexity analysis.
 
-**Files:**
-- `ComplexityMetrics.cs` - Complexity metrics for tasks
+**ComplexityMetrics** (`ComplexityMetrics.cs`)
+- Task complexity analysis results
+- Properties: EstimatedLineCount, ComplexityScore, RequiresDecomposition
 
 ## Design Principles
 
@@ -104,3 +86,4 @@ Models for task complexity analysis.
 - Each model file contains a single primary class
 - All files are kept under 300 lines for maintainability
 - Contract models include `GenerateCode()` for C# code generation
+- Immutability preferred where appropriate

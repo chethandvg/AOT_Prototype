@@ -1,0 +1,37 @@
+<Project>
+  <PropertyGroup>
+    <!-- Common project settings -->
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    
+    <!-- Code quality settings -->
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+    <AnalysisLevel>latest</AnalysisLevel>
+    
+    <!-- Repository info -->
+    <RepositoryUrl>https://github.com/chethandvg/AOT_Prototype</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    
+    <!-- Author info -->
+    <Authors>AoT Engine Contributors</Authors>
+    <Company>AoT Engine</Company>
+    <Product>AoT Engine - Atom of Thought Code Generation</Product>
+    <Copyright>Copyright (c) 2024</Copyright>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)' == 'Release'">
+    <!-- Release-specific settings -->
+    <Optimize>true</Optimize>
+    <DebugType>embedded</DebugType>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)' == 'Debug'">
+    <!-- Debug-specific settings -->
+    <Optimize>false</Optimize>
+    <DebugType>full</DebugType>
+  </PropertyGroup>
+
+</Project>

@@ -11,6 +11,30 @@ The AoT (Atom of Thought) Engine is designed around seven core principles:
 6. **Complexity Management**: Ensure tasks stay within manageable size limits (≤300 lines)
 7. **Contract-First**: Generate and freeze API contracts before implementations
 
+## Project Structure
+
+```
+AOT_Prototype/
+├── src/
+│   └── AoTEngine/                    # Main application
+│       ├── Core/                     # Engine orchestration
+│       ├── Models/                   # Data models and contracts
+│       └── Services/                 # Service layer (organized by concern)
+│           ├── AI/                   # OpenAI integration
+│           ├── Compilation/          # Project building, Roslyn
+│           ├── Contracts/            # Contract-first generation
+│           ├── Documentation/        # Docs export, checkpoints
+│           ├── Integration/          # Code merging, auto-fix
+│           └── Validation/           # Code validation
+├── tests/
+│   └── AoTEngine.Tests/              # Unit tests
+├── docs/
+│   ├── ARCHITECTURE.md               # This file
+│   ├── USAGE.md                      # Usage examples
+│   └── CHANGELOG.md                  # Version history
+└── Directory.Build.props             # Common project settings
+```
+
 ## Architecture Diagram
 
 ```
