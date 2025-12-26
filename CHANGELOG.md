@@ -2,7 +2,38 @@
 
 All notable changes and improvements to the AoT Engine project.
 
-## [Latest] - Contract-First Code Generation
+## [Latest] - OpenAI Model Updates & HttpClient for Code Generation
+
+### Breaking Changes
+
+#### Updated OpenAI Models
+- **Default Model**: Changed from `gpt-4` to `gpt-5.1` for all general tasks (task decomposition, documentation, package queries)
+- **Code Generation Model**: Changed from `gpt-5.2` to `gpt-5.1-codex` for code generation and regeneration tasks
+- **Configuration**: Update `appsettings.json` to use `"Model": "gpt-5.1"` instead of `"gpt-4"`
+
+#### Code Generation Architecture Change
+The code generation system now uses direct HTTP calls via HttpClient instead of the OpenAI SDK's ChatClient for better control over the gpt-5.1-codex model.
+
+**Key Changes:**
+- **HttpClient Integration**: Code generation now uses a static shared HttpClient to avoid socket exhaustion
+- **Strongly-typed DTOs**: Added `ChatCompletionResponse`, `ChatCompletionChoice`, `ChatCompletionMessage`, and `ChatCompletionError` for type-safe API responses
+- **Enhanced Error Handling**: Parses OpenAI API error responses (message, type, code) for better debugging
+- **Input Validation**: Added validation for API keys and message collections
+- **Resource Management**: Implemented IDisposable pattern with proper disposal of both ChatClient and use of static HttpClient
+- **Exception Wrapping**: JsonException and InvalidOperationException are wrapped as HttpRequestException for proper retry behavior
+
+**Technical Details:**
+- Static `_sharedCodeGenHttpClient` shared across all service instances
+- Direct API endpoint: `https://api.openai.com/v1/chat/completions`
+- Model parameter: `gpt-5.1-codex` for optimal code generation performance
+- General tasks continue using OpenAI SDK's ChatClient with `gpt-5.1`
+
+**Migration Guide:**
+1. Update `appsettings.json`: Change `"Model": "gpt-4"` to `"Model": "gpt-5.1"`
+2. No code changes required - the API remains backward compatible
+3. Ensure API key has access to both gpt-5.1 and gpt-5.1-codex models
+
+## [Previous] - Contract-First Code Generation
 
 ### New Features
 
