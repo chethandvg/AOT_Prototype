@@ -6,11 +6,12 @@ namespace AoTEngine.Services.Contracts;
 /// Service for synchronizing contracts across parallel decomposition branches.
 /// Uses ReaderWriterLockSlim for thread-safe operations and optimistic concurrency.
 /// </summary>
-public class BranchSynchronizationServiceV2
+public class BranchSynchronizationServiceV2 : IDisposable
 {
     private readonly Dictionary<string, VersionedContract> _contractRegistry = new();
     private readonly ReaderWriterLockSlim _lock = new();
     private readonly Dictionary<string, int> _contractVersions = new();
+    private bool _disposed = false;
 
     /// <summary>
     /// Registers a contract with version tracking.
@@ -114,6 +115,18 @@ public class BranchSynchronizationServiceV2
 
         foreach (var kvp in proposedContracts)
         {
+            // Validate key format (should contain at least one dot for namespace)
+            if (!kvp.Key.Contains('.'))
+            {
+                result.Conflicts.Add(new ContractConflict
+                {
+                    TypeName = kvp.Key,
+                    ConflictType = ContractConflictType.IncompatibleDefinition,
+                    ResolutionStrategy = ResolutionStrategy.RequiresManualReview
+                });
+                continue;
+            }
+
             var parts = kvp.Key.Split('.');
             var ns = string.Join('.', parts.Take(parts.Length - 1));
             var typeName = parts.Last();
@@ -206,6 +219,19 @@ public class BranchSynchronizationServiceV2
 
     public void Dispose()
     {
-        _lock?.Dispose();
+        Dispose(true);
+        GC.SuppressFinalize(this);
+    }
+
+    protected virtual void Dispose(bool disposing)
+    {
+        if (!_disposed)
+        {
+            if (disposing)
+            {
+                _lock?.Dispose();
+            }
+            _disposed = true;
+        }
     }
 }

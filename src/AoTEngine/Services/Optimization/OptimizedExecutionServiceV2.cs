@@ -6,12 +6,13 @@ namespace AoTEngine.Services.Optimization;
 /// <summary>
 /// Optimized execution service with context-aware caching and safe batching.
 /// </summary>
-public class OptimizedExecutionServiceV2
+public class OptimizedExecutionServiceV2 : IDisposable
 {
-    private readonly IMemoryCache _cache;
+    private readonly MemoryCache _cache;
     private readonly int _maxSpeculativeRequests;
     private readonly double _minConfidenceThreshold;
     private readonly double _maxCostPerSpeculation;
+    private bool _disposed = false;
 
     public OptimizedExecutionServiceV2(
         int maxSpeculativeRequests = 2,
@@ -47,12 +48,8 @@ public class OptimizedExecutionServiceV2
     /// </summary>
     public void InvalidateCacheForContract(string contractKey)
     {
-        // In a real implementation, would track which cache entries depend on which contracts
-        // For now, just clear the cache
-        if (_cache is MemoryCache mc)
-        {
-            mc.Compact(1.0); // Remove all entries
-        }
+        // Clear all cache entries when a contract changes
+        _cache.Compact(1.0); // Remove all entries
     }
 
     /// <summary>
@@ -159,5 +156,23 @@ public class OptimizedExecutionServiceV2
         }
 
         return results;
+    }
+
+    public void Dispose()
+    {
+        Dispose(true);
+        GC.SuppressFinalize(this);
+    }
+
+    protected virtual void Dispose(bool disposing)
+    {
+        if (!_disposed)
+        {
+            if (disposing)
+            {
+                _cache?.Dispose();
+            }
+            _disposed = true;
+        }
     }
 }

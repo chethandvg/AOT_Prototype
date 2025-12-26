@@ -146,17 +146,19 @@ public class DependencyGraphManagerV2
             }
 
             var taskId = kvp.Key;
-            var deps = _dependencies.ContainsKey(taskId) ? _dependencies[taskId] : new List<string>();
+            if (!_dependencies.TryGetValue(taskId, out var deps))
+            {
+                deps = new List<string>();
+            }
 
             // Check if all dependencies are completed
             var allDepsCompleted = deps.All(d =>
             {
-                if (!_taskStatus.ContainsKey(d))
+                if (!_taskStatus.TryGetValue(d, out var status))
                 {
                     return _failurePolicy == FailurePolicy.SkipMissing;
                 }
 
-                var status = _taskStatus[d];
                 if (status == TaskStatus.Failed)
                 {
                     return _failurePolicy == FailurePolicy.SkipFailed;
@@ -236,7 +238,10 @@ public class DependencyGraphManagerV2
             // Find tasks with no remaining dependencies
             var waveTasks = remaining.Where(taskId =>
             {
-                var deps = _dependencies.ContainsKey(taskId) ? _dependencies[taskId] : new List<string>();
+                if (!_dependencies.TryGetValue(taskId, out var deps))
+                {
+                    return true; // No dependencies
+                }
                 return deps.All(d => !remaining.Contains(d));
             }).ToList();
 
@@ -293,26 +298,71 @@ public class DependencyGraphManagerV2
 
     private List<string> FindCyclePath(string from, string to)
     {
-        var path = new List<string> { from, to };
-        // Simplified - in production would do full cycle detection
-        return path;
+        // We are considering adding an edge from -> to. A cycle exists if there is already
+        // a path from 'to' back to 'from'. We find that path using DFS and then prepend
+        // 'from' to build the full cycle chain for debugging.
+        var visited = new HashSet<string>();
+        var path = new List<string>();
+
+        if (TryFindPath(to, from, visited, path) && path.Count > 0)
+        {
+            // 'path' currently contains a sequence starting at 'to' and ending at 'from'.
+            // Prepend 'from' to show the full cycle: from -> to -> ... -> from
+            path.Insert(0, from);
+            return path;
+        }
+
+        // Fallback to the simplified two-node path if, for any reason, a full path
+        // cannot be constructed.
+        return new List<string> { from, to };
+    }
+
+    private bool TryFindPath(string current, string target, HashSet<string> visited, List<string> path)
+    {
+        if (visited.Contains(current))
+        {
+            return false;
+        }
+
+        visited.Add(current);
+        path.Add(current);
+
+        if (current == target)
+        {
+            return true;
+        }
+
+        if (_dependencies.TryGetValue(current, out var deps))
+        {
+            foreach (var dep in deps)
+            {
+                if (TryFindPath(dep, target, visited, path))
+                {
+                    return true;
+                }
+            }
+        }
+
+        // Backtrack if no path from 'current' to 'target' was found through its dependencies
+        path.RemoveAt(path.Count - 1);
+        return false;
     }
 
     private int CalculateDepth(string taskId, Dictionary<string, int> memo)
     {
-        if (memo.ContainsKey(taskId))
+        if (memo.TryGetValue(taskId, out var cachedDepth))
         {
-            return memo[taskId];
+            return cachedDepth;
         }
 
-        if (!_dependencies.ContainsKey(taskId) || _dependencies[taskId].Count == 0)
+        if (!_dependencies.TryGetValue(taskId, out var deps) || deps.Count == 0)
         {
             memo[taskId] = 0;
             return 0;
         }
 
         var maxDepth = 0;
-        foreach (var dep in _dependencies[taskId])
+        foreach (var dep in deps)
         {
             var depth = CalculateDepth(dep, memo);
             maxDepth = Math.Max(maxDepth, depth);

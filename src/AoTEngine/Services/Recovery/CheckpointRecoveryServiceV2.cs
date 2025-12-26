@@ -119,7 +119,7 @@ public class CheckpointRecoveryServiceV2
     /// <summary>
     /// Cleans up failed branch state.
     /// </summary>
-    public async Task CleanupFailedBranchAsync(string branchId)
+    public void CleanupFailedBranch(string branchId)
     {
         // Remove checkpoints related to failed branch
         var files = Directory.GetFiles(_checkpointDirectory, $"*{branchId}*.json");
@@ -128,7 +128,6 @@ public class CheckpointRecoveryServiceV2
             try
             {
                 File.Delete(file);
-                await Task.CompletedTask;
             }
             catch
             {
@@ -140,12 +139,10 @@ public class CheckpointRecoveryServiceV2
     /// <summary>
     /// Rolls back to a previous contract version.
     /// </summary>
-    public async Task<bool> RollbackContractAsync(string contractKey, int targetVersion)
+    public Task<bool> RollbackContractAsync(string contractKey, int targetVersion)
     {
-        // In a real implementation, would restore contract from checkpoint
-        // For now, just return success
-        await Task.CompletedTask;
-        return true;
+        // Placeholder - not yet implemented
+        throw new NotImplementedException("Contract rollback is not yet implemented. Store checkpoint data with contract versions to enable this feature.");
     }
 
     /// <summary>

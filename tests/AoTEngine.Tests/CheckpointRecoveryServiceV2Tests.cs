@@ -25,18 +25,14 @@ public class CheckpointRecoveryServiceV2Tests
 
             // Assert
             Assert.True(File.Exists(checkpointPath));
-            
-            // Cleanup
-            Directory.Delete(tempDir, true);
         }
-        catch
+        finally
         {
-            // Cleanup on failure
+            // Cleanup
             if (Directory.Exists(tempDir))
             {
                 Directory.Delete(tempDir, true);
             }
-            throw;
         }
     }
 
@@ -64,17 +60,13 @@ public class CheckpointRecoveryServiceV2Tests
             Assert.True(result.Success);
             Assert.NotNull(result.RecoveredSnapshot);
             Assert.Equal(3, result.RecoveredSnapshot.MaxDepth);
-            
-            // Cleanup
-            Directory.Delete(tempDir, true);
         }
-        catch
+        finally
         {
             if (Directory.Exists(tempDir))
             {
                 Directory.Delete(tempDir, true);
             }
-            throw;
         }
     }
 

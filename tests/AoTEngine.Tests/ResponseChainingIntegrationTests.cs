@@ -64,51 +64,58 @@ public class ResponseChainingIntegrationTests
         root.Children.Add(child1);
         root.Children.Add(child2);
 
-        // Act & Assert
-
-        // 1. Verify branch synchronization works
-        var syncResult = syncService.RegisterContractAsync(
-            "IService",
-            "public interface IService { void Execute(); }",
-            "TestNamespace"
-        ).Result;
-        Assert.True(syncResult.Success);
-
-        // 2. Verify aggregation works
-        var aggregationResult = aggregationService.AggregateTreeAsync(root).Result;
-        Assert.Equal(AggregationType.Composite, aggregationResult.Type);
-        Assert.Equal(2, aggregationResult.Children.Count);
-
-        // 3. Verify checkpoint works
-        var snapshot = new SerializableTreeSnapshot
+        string? checkpointPath = null;
+        try
         {
-            Root = root,
-            AllNodes = new List<ResponseChainNode> { root, child1, child2 },
-            MaxDepth = 1,
-            AtomicNodeCount = 2
-        };
-        var checkpointPath = checkpointService.SaveCheckpointAsync(snapshot).Result;
-        Assert.True(File.Exists(checkpointPath));
+            // Act & Assert
 
-        // 4. Verify recovery works
-        var recoveryResult = checkpointService.RecoverFromCheckpointAsync(checkpointPath).Result;
-        Assert.True(recoveryResult.Success);
-        Assert.NotNull(recoveryResult.RecoveredSnapshot);
+            // 1. Verify branch synchronization works
+            var syncResult = syncService.RegisterContractAsync(
+                "IService",
+                "public interface IService { void Execute(); }",
+                "TestNamespace"
+            ).Result;
+            Assert.True(syncResult.Success);
 
-        // 5. Verify dependency graph works
-        graphManager.RegisterTask("subtask1");
-        graphManager.RegisterTask("subtask2");
-        var depResult = graphManager.AddDependency("subtask2", "subtask1");
-        Assert.True(depResult.Success);
+            // 2. Verify aggregation works
+            var aggregationResult = aggregationService.AggregateTreeAsync(root).Result;
+            Assert.Equal(AggregationType.Composite, aggregationResult.Type);
+            Assert.Equal(2, aggregationResult.Children.Count);
 
-        graphManager.MarkCompleted("subtask1");
-        var readyTasks = graphManager.GetReadyTasks();
-        Assert.Contains("subtask2", readyTasks);
+            // 3. Verify checkpoint works
+            var snapshot = new SerializableTreeSnapshot
+            {
+                Root = root,
+                AllNodes = new List<ResponseChainNode> { root, child1, child2 },
+                MaxDepth = 1,
+                AtomicNodeCount = 2
+            };
+            checkpointPath = checkpointService.SaveCheckpointAsync(snapshot).Result;
+            Assert.True(File.Exists(checkpointPath));
 
-        // Cleanup
-        if (File.Exists(checkpointPath))
+            // 4. Verify recovery works
+            var recoveryResult = checkpointService.RecoverFromCheckpointAsync(checkpointPath).Result;
+            Assert.True(recoveryResult.Success);
+            Assert.NotNull(recoveryResult.RecoveredSnapshot);
+
+            // 5. Verify dependency graph works
+            graphManager.RegisterTask("subtask1");
+            graphManager.RegisterTask("subtask2");
+            var depResult = graphManager.AddDependency("subtask2", "subtask1");
+            Assert.True(depResult.Success);
+
+            graphManager.MarkCompleted("subtask1");
+            var readyTasks = graphManager.GetReadyTasks();
+            Assert.Contains("subtask2", readyTasks);
+        }
+        finally
         {
-            File.Delete(checkpointPath);
+            // Cleanup
+            if (checkpointPath != null && File.Exists(checkpointPath))
+            {
+                File.Delete(checkpointPath);
+            }
+            syncService.Dispose();
         }
     }
 

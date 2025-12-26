@@ -143,19 +143,31 @@ public class HierarchicalDecompositionEngine
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"⚠️  Failed to decompose task {task.Id}: {ex.Message}");
-            // Return single task as fallback
+            // Log full exception details to standard error to avoid silently swallowing critical issues
+            Console.Error.WriteLine($"⚠️  Failed to decompose task {task.Id}: {ex}");
+
+            // For clearly critical errors (e.g., authentication/authorization issues), rethrow so they can be handled upstream
+            if (ex is UnauthorizedAccessException)
+            {
+                throw;
+            }
+
+            // For other errors, return single task as fallback to preserve existing behavior
             return new List<TaskNode> { task };
         }
     }
 
     /// <summary>
-    /// Finds the root node of a tree.
+    /// Returns the root node of a response chain.
     /// </summary>
+    /// <remarks>
+    /// In this engine, response chains are always normalized so that callers pass the actual
+    /// root node into this method. Because of that invariant, no traversal is required and
+    /// the input node is returned unchanged.
+    /// </remarks>
     private ResponseChainNode FindRoot(ResponseChainNode node)
     {
-        // In a real implementation, would traverse up to root
-        // For now, just return the node
+        // Callers are required to pass the root node; by design this is a no-op.
         return node;
     }
 
@@ -192,14 +204,16 @@ public class HierarchicalDecompositionEngine
 
         foreach (var node in atomicNodes)
         {
+            var executionResult = node.ExecutionResult;
+
             var task = new TaskNode
             {
                 Id = node.TaskId,
-                Description = node.ExecutionResult?.Summary ?? $"Task {node.TaskId}",
-                Context = node.ExecutionResult?.GeneratedCode ?? "",
-                GeneratedCode = node.ExecutionResult?.GeneratedCode ?? "",
-                IsCompleted = node.ExecutionResult != null,
-                IsValidated = node.ExecutionResult?.IsValidated ?? false
+                Description = executionResult?.Summary ?? $"Task {node.TaskId}",
+                Context = executionResult?.GeneratedCode ?? "",
+                GeneratedCode = executionResult?.GeneratedCode ?? "",
+                IsCompleted = executionResult != null,
+                IsValidated = executionResult?.IsValidated ?? false
             };
 
             tasks.Add(task);

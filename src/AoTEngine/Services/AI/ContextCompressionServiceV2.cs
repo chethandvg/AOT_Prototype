@@ -140,7 +140,8 @@ public class ContextCompressionServiceV2
             catch
             {
                 // If Roslyn parsing fails, use simple compression
-                return code.Length > _maxContextTokens * 4 ? code.Substring(0, _maxContextTokens * 4) : code;
+                var maxLength = Math.Min(code.Length, _maxContextTokens * 4);
+                return code.Substring(0, maxLength);
             }
         });
     }
@@ -168,8 +169,8 @@ public class ContextCompressionServiceV2
             var originalInterfaces = originalTree.GetRoot().DescendantNodes().OfType<InterfaceDeclarationSyntax>().Count();
             var compressedInterfaces = compressedTree.GetRoot().DescendantNodes().OfType<InterfaceDeclarationSyntax>().Count();
 
-            // Should preserve all interfaces
-            return compressedInterfaces >= originalInterfaces * 0.8; // Allow 20% loss
+            // Should preserve all interfaces - require 100% preservation for critical contracts
+            return compressedInterfaces >= originalInterfaces;
         });
     }
 
