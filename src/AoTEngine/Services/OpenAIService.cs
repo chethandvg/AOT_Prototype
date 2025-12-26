@@ -20,12 +20,13 @@ namespace AoTEngine.Services;
 /// - OpenAIService.Documentation.cs: Documentation and summary generation
 /// - OpenAIService.TaskDecomposition.cs: Complex task decomposition methods
 /// </remarks>
-public partial class OpenAIService
+public partial class OpenAIService : IDisposable
 {
     private readonly ChatClient _chatClient;
     private readonly HttpClient _codeGenHttpClient; // Use HttpClient for code generation instead of OpenAI SDK
     private readonly string _codeGenModel = "gpt-5.1-codex";
     private const int MaxRetries = 3;
+    private bool _disposed = false;
     
     // Regex for validating semantic version format - compiled once for efficiency
     private static readonly System.Text.RegularExpressions.Regex VersionRegex = 
@@ -62,9 +63,9 @@ public partial class OpenAIService
                 },
                 content = m switch
                 {
-                    SystemChatMessage sys => sys.Content[0].Text,
-                    UserChatMessage usr => usr.Content[0].Text,
-                    AssistantChatMessage ast => ast.Content[0].Text,
+                    SystemChatMessage sys when sys.Content.Count > 0 => sys.Content[0].Text,
+                    UserChatMessage usr when usr.Content.Count > 0 => usr.Content[0].Text,
+                    AssistantChatMessage ast when ast.Content.Count > 0 => ast.Content[0].Text,
                     _ => ""
                 }
             }).ToList()
@@ -179,5 +180,29 @@ Return ONLY valid JSON with the structure specified.";
         }
 
         throw new InvalidOperationException("Failed to decompose task after multiple attempts");
+    }
+
+    /// <summary>
+    /// Disposes the HttpClient used for code generation.
+    /// </summary>
+    public void Dispose()
+    {
+        Dispose(true);
+        GC.SuppressFinalize(this);
+    }
+
+    /// <summary>
+    /// Protected implementation of Dispose pattern.
+    /// </summary>
+    protected virtual void Dispose(bool disposing)
+    {
+        if (!_disposed)
+        {
+            if (disposing)
+            {
+                _codeGenHttpClient?.Dispose();
+            }
+            _disposed = true;
+        }
     }
 }
