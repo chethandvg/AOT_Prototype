@@ -17,31 +17,43 @@ AoTEngine is an AI-powered code generation system that:
 
 ```
 AoTEngine/
-├── Core/                    # Orchestration and execution engine
-│   ├── AoTEngineOrchestrator.cs
-│   ├── AoTResult.cs
-│   ├── ParallelExecutionEngine.cs (partial)
-│   └── TaskComplexityAnalyzer.cs
-├── Models/                  # Data models and DTOs
-│   ├── TaskNode.cs
-│   ├── ValidationResult.cs
-│   ├── ContractCatalog.cs   # NEW - Frozen API contracts
-│   ├── SymbolTable.cs       # ENHANCED - Collision detection
-│   ├── TypeRegistry.cs
+├── Core/                        # Orchestration and execution engine
+│   ├── AoTEngineOrchestrator.cs # Main workflow coordinator
+│   ├── AoTResult.cs             # Execution result model
+│   └── ParallelExecutionEngine*.cs
+├── Models/                      # Data models and DTOs
+│   ├── TaskNode.cs              # Atomic task representation
+│   ├── ContractCatalog.cs       # Frozen API contracts
+│   ├── SymbolTable.cs           # Project-wide symbol tracking
+│   ├── TypeRegistry.cs          # Type conflict detection
 │   └── ...
-├── Services/                # Service layer
-│   ├── OpenAIService.cs (partial)
-│   ├── CodeValidatorService.cs (partial)
-│   ├── CodeMergerService.cs (partial)
-│   ├── ContractGenerationService.cs  # NEW
-│   ├── ContractManifestService.cs    # NEW
-│   ├── PromptContextBuilder.cs       # NEW
-│   ├── AtomCompilationService.cs     # NEW
-│   ├── AutoFixService.cs             # NEW
-│   └── ...
-├── appsettings.json         # Configuration
-├── assembly-mappings.json   # Assembly reference mappings
-└── Program.cs               # Console entry point
+├── Services/                    # Service layer (organized by concern)
+│   ├── AI/                      # OpenAI integration
+│   │   ├── OpenAIService*.cs
+│   │   ├── PromptContextBuilder.cs
+│   │   └── KnownPackageVersions.cs
+│   ├── Compilation/             # Project building, Roslyn
+│   │   ├── ProjectBuildService*.cs
+│   │   ├── AtomCompilationService.cs
+│   │   └── AssemblyReferenceManager.cs
+│   ├── Contracts/               # Contract-first generation
+│   │   ├── ContractGenerationService.cs
+│   │   └── ContractManifestService.cs
+│   ├── Documentation/           # Docs export, checkpoints
+│   │   ├── DocumentationService*.cs
+│   │   └── CheckpointService.cs
+│   ├── Integration/             # Code merging, auto-fix
+│   │   ├── CodeMergerService*.cs
+│   │   ├── IntegrationFixer.cs
+│   │   ├── AutoFixService.cs
+│   │   ├── TaskComplexityAnalyzer*.cs
+│   │   ├── AutoDecomposer*.cs
+│   │   └── UserInteractionService*.cs
+│   └── Validation/              # Code validation
+│       └── CodeValidatorService*.cs
+├── appsettings.json             # Configuration
+├── assembly-mappings.json       # Assembly reference mappings
+└── Program.cs                   # Console entry point
 ```
 
 ## Key Features

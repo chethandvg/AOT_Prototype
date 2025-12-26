@@ -1,10 +1,11 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
+    <!-- Project-specific settings (OutputType overrides Directory.Build.props) -->
     <OutputType>Exe</OutputType>
-    <TargetFramework>net9.0</TargetFramework>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>enable</Nullable>
+    <RootNamespace>AoTEngine</RootNamespace>
+    <AssemblyName>AoTEngine</AssemblyName>
+    <Description>AoT Engine - Atom of Thought Code Generation System</Description>
   </PropertyGroup>
 
   <ItemGroup>

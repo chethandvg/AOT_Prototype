@@ -1,58 +1,99 @@
-# Core Folder
+# Core Layer
 
 This folder contains the core orchestration and execution engine components for the AoT (Atom of Thought) Engine.
+
+## Overview
+
+The Core layer is the heart of the AoT Engine, coordinating all workflow steps from task decomposition to final code generation.
 
 ## Components
 
 ### AoTEngineOrchestrator
-The main orchestrator that coordinates the entire AoT workflow including task decomposition, contract generation, execution, validation, and documentation generation.
 
-**Files:**
-- `AoTEngineOrchestrator.cs` - Main orchestrator class (271 lines)
-  - `ExecuteAsync()` - Main workflow with 7 steps:
-    - Step 1: Decompose request
-    - Step 1.25: Contract generation (when `enableContractFirst=true`) (NEW)
-    - Step 1.5: Complexity analysis
-    - Step 2: Execute tasks
-    - Step 3: Validate contracts
-    - Step 4: Merge code
-    - Step 5: Generate report
-    - Step 6: Synthesize documentation
-  - `ExtractProjectName()` - Extracts project name from user request for namespace prefixing
+The main orchestrator that coordinates the entire AoT workflow.
+
+**File:** `AoTEngineOrchestrator.cs`
+
+**Workflow Steps:**
+1. **Decompose request** - Break down user request into atomic tasks
+2. **Contract generation** - Generate frozen API contracts (when `enableContractFirst=true`)
+3. **Complexity analysis** - Analyze and decompose complex tasks (>300 lines)
+4. **Execute tasks** - Run tasks in parallel with validation
+5. **Validate contracts** - Ensure all dependencies are satisfied
+6. **Merge code** - Combine task outputs into cohesive solution
+7. **Generate report** - Create execution statistics
+8. **Synthesize documentation** - Generate project documentation
 
 ### AoTResult
+
 Result model returned from AoT Engine execution.
 
-**Files:**
-- `AoTResult.cs` - Result and DocumentationPaths classes (80 lines)
-  - `ContractCatalog` property - Access to frozen contracts (NEW)
+**File:** `AoTResult.cs`
+
+**Properties:**
+- `Success` - Whether execution completed successfully
+- `FinalCode` - The merged generated code
+- `Tasks` - List of all executed tasks
+- `ExecutionReport` - Execution statistics
+- `ProjectDocumentation` - Generated documentation
+- `ContractCatalog` - Frozen contracts (when Contract-First enabled)
 
 ### ParallelExecutionEngine
-Engine for executing tasks in parallel based on their dependencies, with support for batch and hybrid validation modes.
+
+Engine for executing tasks in parallel based on their dependencies.
 
 **Files (partial classes):**
-- `ParallelExecutionEngine.cs` - Core fields, constructor, complexity analysis (213 lines)
-- `ParallelExecutionEngine.BatchValidation.cs` - Batch validation methods (145 lines)
-- `ParallelExecutionEngine.HybridValidation.cs` - Hybrid validation methods (260 lines)
-- `ParallelExecutionEngine.TaskExecution.cs` - Individual task execution (194 lines)
-- `ParallelExecutionEngine.ProblemIdentification.cs` - Problem identification (167 lines)
-- `ParallelExecutionEngine.Regeneration.cs` - Task regeneration methods (169 lines)
-- `ParallelExecutionEngine.Utilities.cs` - Utility methods (144 lines)
 
-### TaskComplexityAnalyzer
-Analyzes task complexity to determine if decomposition is needed.
+| File | Responsibility |
+|------|----------------|
+| `ParallelExecutionEngine.cs` | Core fields, constructor, complexity analysis |
+| `ParallelExecutionEngine.BatchValidation.cs` | Batch validation mode |
+| `ParallelExecutionEngine.HybridValidation.cs` | Hybrid validation mode |
+| `ParallelExecutionEngine.TaskExecution.cs` | Individual task execution |
+| `ParallelExecutionEngine.ProblemIdentification.cs` | Error analysis and problem identification |
+| `ParallelExecutionEngine.Regeneration.cs` | Task regeneration with error feedback |
+| `ParallelExecutionEngine.Utilities.cs` | Helper methods |
 
-**Files:**
-- `TaskComplexityAnalyzer.cs` - Complexity analysis logic
+**Validation Modes:**
+- **Individual** - Validate each task independently
+- **Batch** - Validate all tasks together for cross-references
+- **Hybrid** - Individual validation first, then batch for integration
 
-### CodeMergerService
-Merges generated code snippets from multiple tasks.
+## Execution Flow
 
-**Files:**
-- `CodeMergerService.cs` - Code merging logic
+```
+User Request
+    │
+    ▼
+┌───────────────────────────┐
+│  AoTEngineOrchestrator    │
+│  (Workflow Coordination)  │
+└─────────────┬─────────────┘
+              │
+              ▼
+┌───────────────────────────┐
+│  ParallelExecutionEngine  │
+│  (Task Execution)         │
+│                           │
+│  ┌─────┐ ┌─────┐ ┌─────┐ │
+│  │Task1│ │Task2│ │Task3│ │  ← Parallel execution
+│  └──┬──┘ └──┬──┘ └──┬──┘ │
+│     └───────┴───────┘    │
+│              │           │
+│              ▼           │
+│        Validation        │
+│              │           │
+│              ▼           │
+│     Summary Generation   │
+└─────────────┬─────────────┘
+              │
+              ▼
+         AoTResult
+```
 
 ## Design Principles
 
 - All `.cs` files are kept under 300 lines for maintainability
 - Large classes use partial class pattern to split functionality
 - Clear separation between orchestration, execution, and validation concerns
+- Dependency injection used for service composition
