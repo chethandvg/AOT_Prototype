@@ -20,7 +20,16 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Reference main project and all modules -->
     <ProjectReference Include="..\..\src\AoTEngine\AoTEngine.csproj" />
+    <ProjectReference Include="..\..\src\AoTEngine.Models\AoTEngine.Models.csproj" />
+    <ProjectReference Include="..\..\src\AoTEngine.Services.AI\AoTEngine.Services.AI.csproj" />
+    <ProjectReference Include="..\..\src\AoTEngine.Services.Compilation\AoTEngine.Services.Compilation.csproj" />
+    <ProjectReference Include="..\..\src\AoTEngine.Services.Contracts\AoTEngine.Services.Contracts.csproj" />
+    <ProjectReference Include="..\..\src\AoTEngine.Services.Documentation\AoTEngine.Services.Documentation.csproj" />
+    <ProjectReference Include="..\..\src\AoTEngine.Services.Integration\AoTEngine.Services.Integration.csproj" />
+    <ProjectReference Include="..\..\src\AoTEngine.Services.Validation\AoTEngine.Services.Validation.csproj" />
+    <ProjectReference Include="..\..\src\AoTEngine.Core\AoTEngine.Core.csproj" />
   </ItemGroup>
 
 </Project>
