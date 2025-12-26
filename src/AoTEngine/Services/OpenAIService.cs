@@ -1,8 +1,46 @@
 using AoTEngine.Models;
 using Newtonsoft.Json;
 using OpenAI.Chat;
+using System.Net.Http.Headers;
+using System.Text;
 
 namespace AoTEngine.Services;
+
+/// <summary>
+/// OpenAI API response models for Chat Completion endpoint.
+/// </summary>
+internal class ChatCompletionResponse
+{
+    [JsonProperty("choices")]
+    public List<ChatCompletionChoice>? Choices { get; set; }
+
+    [JsonProperty("error")]
+    public ChatCompletionError? Error { get; set; }
+}
+
+internal class ChatCompletionChoice
+{
+    [JsonProperty("message")]
+    public ChatCompletionMessage? Message { get; set; }
+}
+
+internal class ChatCompletionMessage
+{
+    [JsonProperty("content")]
+    public string? Content { get; set; }
+}
+
+internal class ChatCompletionError
+{
+    [JsonProperty("message")]
+    public string? Message { get; set; }
+
+    [JsonProperty("type")]
+    public string? Type { get; set; }
+
+    [JsonProperty("code")]
+    public string? Code { get; set; }
+}
 
 /// <summary>
 /// Service for interacting with OpenAI API.
@@ -18,22 +56,146 @@ namespace AoTEngine.Services;
 /// - OpenAIService.Documentation.cs: Documentation and summary generation
 /// - OpenAIService.TaskDecomposition.cs: Complex task decomposition methods
 /// </remarks>
-public partial class OpenAIService
+public partial class OpenAIService : IDisposable
 {
     private readonly ChatClient _chatClient;
-    private readonly ChatClient _codeGenChatClient; // Separate client for code generation with codex-max
+    // Use static HttpClient to avoid socket exhaustion and DNS issues.
+    // HttpClient for code generation instead of OpenAI SDK to allow direct control over
+    // the HTTP request/response for the gpt-5.1-codex model, which requires specific
+    // settings and payload structure for optimal code generation performance.
+    private static readonly HttpClient _sharedCodeGenHttpClient = new HttpClient
+    {
+        BaseAddress = new Uri("https://api.openai.com/v1/")
+    };
+    private readonly string _apiKey;
+    private readonly string _codeGenModel = "gpt-5.1-codex";
     private const int MaxRetries = 3;
+    private bool _disposed = false;
     
     // Regex for validating semantic version format - compiled once for efficiency
     private static readonly System.Text.RegularExpressions.Regex VersionRegex = 
         new System.Text.RegularExpressions.Regex(@"^\d+\.\d+(\.\d+)?(\.\d+)?(-[\w.]+)?(\+[\w.]+)?$", 
             System.Text.RegularExpressions.RegexOptions.Compiled);
 
-    public OpenAIService(string apiKey, string model = "gpt-4")
+    public OpenAIService(string apiKey, string model = "gpt-5.1")
     {
+        if (string.IsNullOrWhiteSpace(apiKey))
+        {
+            throw new ArgumentException("API key cannot be null or empty.", nameof(apiKey));
+        }
+
+        _apiKey = apiKey;
         _chatClient = new ChatClient(model, apiKey);
-        // Use gpt-4.5-codex-max for code generation phase
-        _codeGenChatClient = new ChatClient("gpt-5.2", apiKey);
+    }
+
+    /// <summary>
+    /// Helper method to call OpenAI Chat Completion API using HttpClient for code generation.
+    /// </summary>
+    private async Task<string> CallCodeGenChatCompletionAsync(List<ChatMessage> messages)
+    {
+        if (messages == null)
+        {
+            throw new ArgumentNullException(nameof(messages));
+        }
+
+        if (messages.Count == 0)
+        {
+            throw new ArgumentException("Messages collection cannot be empty.", nameof(messages));
+        }
+
+        try
+        {
+            var requestBody = new
+            {
+                model = _codeGenModel,
+                messages = messages.Select(m => new
+                {
+                    role = m switch
+                    {
+                        SystemChatMessage => "system",
+                        UserChatMessage => "user",
+                        AssistantChatMessage => "assistant",
+                        _ => "user"
+                    },
+                    content = m switch
+                    {
+                        SystemChatMessage sys when sys.Content.Count > 0 => sys.Content[0].Text,
+                        UserChatMessage usr when usr.Content.Count > 0 => usr.Content[0].Text,
+                        AssistantChatMessage ast when ast.Content.Count > 0 => ast.Content[0].Text,
+                        _ => throw new InvalidOperationException("Chat message has no content or is in an unsupported format.")
+                    }
+                }).ToList()
+            };
+
+            var jsonContent = JsonConvert.SerializeObject(requestBody);
+            using var httpContent = new StringContent(jsonContent, Encoding.UTF8, "application/json");
+
+            using var requestMessage = new HttpRequestMessage(HttpMethod.Post, "chat/completions");
+            requestMessage.Content = httpContent;
+            requestMessage.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _apiKey);
+            requestMessage.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+
+            var response = await _sharedCodeGenHttpClient.SendAsync(requestMessage);
+            var responseBody = await response.Content.ReadAsStringAsync();
+
+            if (!response.IsSuccessStatusCode)
+            {
+                var errorMessage = $"OpenAI API request failed with status code {(int)response.StatusCode} ({response.StatusCode}).";
+
+                try
+                {
+                    var errorResponse = JsonConvert.DeserializeObject<ChatCompletionResponse>(responseBody);
+                    var apiError = errorResponse?.Error;
+                    if (apiError != null)
+                    {
+                        var detailsBuilder = new StringBuilder();
+                        if (!string.IsNullOrWhiteSpace(apiError.Message))
+                        {
+                            detailsBuilder.Append(apiError.Message);
+                        }
+                        if (!string.IsNullOrWhiteSpace(apiError.Type))
+                        {
+                            if (detailsBuilder.Length > 0) detailsBuilder.Append(' ');
+                            detailsBuilder.Append($"(type: {apiError.Type})");
+                        }
+                        if (!string.IsNullOrWhiteSpace(apiError.Code))
+                        {
+                            if (detailsBuilder.Length > 0) detailsBuilder.Append(' ');
+                            detailsBuilder.Append($"(code: {apiError.Code})");
+                        }
+
+                        if (detailsBuilder.Length > 0)
+                        {
+                            errorMessage += " Details: " + detailsBuilder.ToString();
+                        }
+                    }
+                }
+                catch (JsonException)
+                {
+                    // If the error body is not valid JSON, fall back to the generic message.
+                }
+
+                throw new HttpRequestException(errorMessage);
+            }
+
+            var result = JsonConvert.DeserializeObject<ChatCompletionResponse>(responseBody);
+
+            if (result == null || result.Choices == null || result.Choices.Count == 0)
+            {
+                throw new InvalidOperationException("OpenAI API returned no choices in response.");
+            }
+
+            string? content = result.Choices[0]?.Message?.Content;
+            return content ?? throw new InvalidOperationException("OpenAI API returned null content.");
+        }
+        catch (JsonException ex)
+        {
+            throw new HttpRequestException("Error serializing or deserializing OpenAI code generation request/response.", ex);
+        }
+        catch (InvalidOperationException ex)
+        {
+            throw new HttpRequestException("Received an invalid OpenAI code generation response.", ex);
+        }
     }
 
     /// <summary>
@@ -127,5 +289,29 @@ Return ONLY valid JSON with the structure specified.";
         }
 
         throw new InvalidOperationException("Failed to decompose task after multiple attempts");
+    }
+
+    /// <summary>
+    /// Disposes the resources used by the service.
+    /// </summary>
+    public void Dispose()
+    {
+        Dispose(true);
+        GC.SuppressFinalize(this);
+    }
+
+    /// <summary>
+    /// Protected implementation of Dispose pattern.
+    /// </summary>
+    protected virtual void Dispose(bool disposing)
+    {
+        if (!_disposed)
+        {
+            if (disposing)
+            {
+                (_chatClient as IDisposable)?.Dispose();
+            }
+            _disposed = true;
+        }
     }
 }

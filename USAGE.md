@@ -86,7 +86,7 @@ Edit `appsettings.json`:
 {
   "OpenAI": {
     "ApiKey": "sk-...",
-    "Model": "gpt-4"
+    "Model": "gpt-5.1"
   },
   "Engine": {
     "MaxRetries": 5,
@@ -112,7 +112,7 @@ Edit `appsettings.json`:
 
 ```bash
 export OPENAI_API_KEY="sk-..."
-export OPENAI_MODEL="gpt-4-turbo"
+export OPENAI_MODEL="gpt-5.1"
 ```
 
 ### Programmatic Usage
@@ -121,7 +121,9 @@ export OPENAI_MODEL="gpt-4-turbo"
 using AoTEngine.Core;
 using AoTEngine.Services;
 
-var openAIService = new OpenAIService(apiKey, "gpt-4");
+// Default model is gpt-5.1 for general tasks
+// Code generation automatically uses gpt-5.1-codex via HttpClient
+var openAIService = new OpenAIService(apiKey, "gpt-5.1");
 var validatorService = new CodeValidatorService();
 var userInteractionService = new UserInteractionService();
 

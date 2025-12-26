@@ -10,7 +10,7 @@ var configuration = new ConfigurationBuilder()
     .Build();
 
 var apiKey = configuration["OpenAI:ApiKey"] ?? Environment.GetEnvironmentVariable("OPENAI_API_KEY");
-var model = configuration["OpenAI:Model"] ?? "gpt-4";
+var model = configuration["OpenAI:Model"] ?? "gpt-5.1";
 
 if (string.IsNullOrEmpty(apiKey))
 {

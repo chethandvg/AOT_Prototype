@@ -242,40 +242,54 @@ The AoT (Atom of Thought) Engine is designed around seven core principles:
 
 **OpenAIService**
 ```csharp
+// General tasks use OpenAI SDK (ChatClient) with gpt-5.1
 DecomposeTaskAsync()
-  ├─> Sends structured prompt to GPT
+  ├─> Sends structured prompt to GPT via ChatClient
   ├─> Parses JSON response into TaskNodes
   └─> Returns TaskDecompositionResponse
 
+// Code generation uses HttpClient with gpt-5.1-codex for direct API control
 GenerateCodeAsync()
   ├─> Builds context from dependencies
-  ├─> Sends code generation prompt
+  ├─> Calls CallCodeGenChatCompletionAsync() via HttpClient
+  ├─> Sends code generation prompt to gpt-5.1-codex
   └─> Returns C# code snippet
 
 GenerateCodeWithContractsAsync() // NEW - Contract-aware generation
   ├─> Uses frozen contracts for context
   ├─> Injects exact interface/abstract signatures
+  ├─> Calls CallCodeGenChatCompletionAsync() via HttpClient
   ├─> Validates against contracts
   └─> Returns contract-compliant C# code
 
 RegenerateCodeWithErrorsAsync()
   ├─> Includes validation errors in prompt
-  ├─> Requests corrected code
+  ├─> Calls CallCodeGenChatCompletionAsync() via HttpClient
+  ├─> Requests corrected code from gpt-5.1-codex
   └─> Returns improved snippet
+
+CallCodeGenChatCompletionAsync() // NEW - Direct HTTP API call
+  ├─> Validates messages collection
+  ├─> Constructs JSON request body with strongly-typed DTOs
+  ├─> Uses static shared HttpClient to avoid socket exhaustion
+  ├─> Sends POST to https://api.openai.com/v1/chat/completions
+  ├─> Parses response with ChatCompletionResponse DTO
+  ├─> Extracts detailed error information on failure
+  └─> Returns generated code or throws HttpRequestException
 
 GenerateTaskSummaryAsync()
   ├─> Analyzes generated code
-  ├─> Generates structured JSON summary
+  ├─> Generates structured JSON summary via ChatClient
   └─> Returns TaskSummaryInfo
 
 GenerateArchitectureSummaryAsync()
   ├─> Analyzes all task summaries
-  ├─> Generates high-level overview
+  ├─> Generates high-level overview via ChatClient
   └─> Returns markdown summary
 
 DecomposeComplexTaskAsync()
   ├─> Receives task estimated to exceed 300 lines
-  ├─> Creates subtask breakdown with OpenAI
+  ├─> Creates subtask breakdown with OpenAI via ChatClient
   ├─> Manages dependencies between subtasks
   └─> Returns list of smaller TaskNodes
 ```
@@ -848,7 +862,7 @@ Synthesize documentation from all summaries
 {
   "OpenAI": {
     "ApiKey": "API key or use env var",
-    "Model": "gpt-4 | gpt-3.5-turbo"
+    "Model": "gpt-5.1 | gpt-4 | gpt-3.5-turbo"
   },
   "Engine": {
     "MaxRetries": 3,
@@ -874,6 +888,25 @@ Synthesize documentation from all summaries
 ### Environment Variables
 - `OPENAI_API_KEY`: OpenAI API key (overrides appsettings)
 - `OPENAI_MODEL`: Model selection (optional)
+
+### Model Configuration
+
+**Default Model (gpt-5.1)**: Used for general tasks
+- Task decomposition
+- Documentation generation
+- Package version queries
+- Summary generation
+- Uses OpenAI SDK's ChatClient
+
+**Code Generation Model (gpt-5.1-codex)**: Used for code generation
+- Code generation (`GenerateCodeAsync`)
+- Code regeneration (`RegenerateCodeWithErrorsAsync`)
+- Contract-aware code generation (`GenerateCodeWithContractsAsync`)
+- Uses direct HTTP calls via static shared HttpClient
+- Provides fine-grained control over request/response
+- Better performance for high-volume code generation
+
+**Architecture Rationale**: The dual-model approach separates general language tasks from specialized code generation, allowing optimal model selection for each use case. Using HttpClient for code generation provides direct control over the API request/response, essential for the gpt-5.1-codex model's specific requirements.
 
 ## Extensibility Points
 

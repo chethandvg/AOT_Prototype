@@ -153,7 +153,7 @@ dotnet restore
 {
   "OpenAI": {
     "ApiKey": "your-api-key-here",
-    "Model": "gpt-4"
+    "Model": "gpt-5.1"
   }
 }
 ```
@@ -239,7 +239,7 @@ dotnet test
 {
   "OpenAI": {
     "ApiKey": "YOUR_API_KEY",
-    "Model": "gpt-4"
+    "Model": "gpt-5.1"
   },
   "Engine": {
     "MaxRetries": 3,
