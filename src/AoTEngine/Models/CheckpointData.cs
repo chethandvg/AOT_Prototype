@@ -126,4 +126,15 @@ public class CompletedTaskDetail
     /// Task summary.
     /// </summary>
     public string Summary { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Validation errors from the last validation attempt.
+    /// Used for resume capability to provide context when regenerating code.
+    /// </summary>
+    public List<string> ValidationErrors { get; set; } = new();
+
+    /// <summary>
+    /// Documentation status: "draft" or "final".
+    /// </summary>
+    public string DocumentationStatus { get; set; } = string.Empty;
 }

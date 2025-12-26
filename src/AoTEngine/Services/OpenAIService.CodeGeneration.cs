@@ -101,31 +101,55 @@ public partial class OpenAIService
     }
 
     /// <summary>
-    /// Regenerates code with validation errors as feedback.
+    /// Regenerates code with validation errors as feedback using the "Code Repair Expert" pattern.
+    /// Provides the LLM with original intent, failed code, error log, and suggestions for targeted repairs.
     /// Filters out namespace and type not found errors as these will be resolved in batch validation.
     /// </summary>
-    public async Task<string> RegenerateCodeWithErrorsAsync(TaskNode task, ValidationResult validationResult)
+    /// <param name="task">The task to regenerate code for.</param>
+    /// <param name="validationResult">Validation errors and warnings.</param>
+    /// <param name="suggestions">Optional list of suggestions for fixing the code.</param>
+    /// <param name="existingTypeCode">Optional code from existing types that should be reused instead of regenerated.</param>
+    public async Task<string> RegenerateCodeWithErrorsAsync(
+        TaskNode task, 
+        ValidationResult validationResult,
+        List<string>? suggestions = null,
+        string? existingTypeCode = null)
     {
         // Filter out namespace and type-related errors that will be resolved in batch validation
         var filteredErrors = FilterSpecificErrors(validationResult.Errors);
         
         // If all errors were filtered out, return the original code (errors will be fixed in batch validation)
-        if (!filteredErrors.Any())
+        if (!filteredErrors.Any() && suggestions == null && existingTypeCode == null)
         {
             Console.WriteLine($"   ℹ️  All errors for task {task.Id} are namespace/type-related and will be resolved in batch validation");
             return task.GeneratedCode;
         }
         
+        // Generate automatic suggestions based on error patterns if none provided
+        var allSuggestions = suggestions?.Any() == true 
+            ? suggestions 
+            : GenerateSuggestionsFromErrors(filteredErrors);
+        
         var errorsText = string.Join("\n", filteredErrors);
         var warningsText = string.Join("\n", validationResult.Warnings);
+        var suggestionsText = allSuggestions.Any() ? string.Join("\n", allSuggestions.Select((s, i) => $"{i + 1}. {s}")) : "";
 
         for (int attempt = 0; attempt < MaxRetries; attempt++)
         {
             try
             {
-                // Use enhanced prompt on the 3rd attempt
+                // Use "Code Repair Expert" pattern with original intent, failed code, error log, and suggestions
                 var systemPrompt = GetCodeRegenerationSystemPrompt(attempt);
-                var userPrompt = GetCodeRegenerationUserPrompt(task.GeneratedCode, errorsText, warningsText, attempt);
+                var userPrompt = GetCodeRegenerationUserPrompt(
+                    task.Description,
+                    task.Namespace,
+                    task.ExpectedTypes,
+                    task.GeneratedCode, 
+                    errorsText, 
+                    warningsText,
+                    suggestionsText,
+                    existingTypeCode,
+                    attempt);
 
                 var messages = new List<ChatMessage>
                 {
@@ -163,6 +187,81 @@ public partial class OpenAIService
         }
 
         throw new InvalidOperationException("Failed to regenerate code after multiple attempts");
+    }
+
+    /// <summary>
+    /// Generates suggestions based on common error patterns.
+    /// </summary>
+    private List<string> GenerateSuggestionsFromErrors(List<string> errors)
+    {
+        var suggestions = new List<string>();
+        
+        foreach (var error in errors)
+        {
+            var errorLower = error.ToLowerInvariant();
+            
+            // Suggestion for missing members
+            if (errorLower.Contains("does not contain a definition for"))
+            {
+                var memberMatch = System.Text.RegularExpressions.Regex.Match(error, @"'([^']+)'.*does not contain a definition for\s+'([^']+)'");
+                if (memberMatch.Success)
+                {
+                    suggestions.Add($"Add missing member '{memberMatch.Groups[2].Value}' to type '{memberMatch.Groups[1].Value}'");
+                }
+            }
+            
+            // Suggestion for interface implementation
+            if (errorLower.Contains("does not implement interface member"))
+            {
+                var implMatch = System.Text.RegularExpressions.Regex.Match(error, @"'([^']+)'.*does not implement interface member\s+'([^']+)'");
+                if (implMatch.Success)
+                {
+                    suggestions.Add($"Implement interface member '{implMatch.Groups[2].Value}' in '{implMatch.Groups[1].Value}'");
+                }
+            }
+            
+            // Suggestion for type mismatch
+            if (errorLower.Contains("cannot convert") || errorLower.Contains("cannot implicitly convert"))
+            {
+                var convertMatch = System.Text.RegularExpressions.Regex.Match(error, @"cannot (?:implicitly )?convert.*'([^']+)'.*to.*'([^']+)'");
+                if (convertMatch.Success)
+                {
+                    suggestions.Add($"Convert type '{convertMatch.Groups[1].Value}' to '{convertMatch.Groups[2].Value}' or change the expected type");
+                }
+            }
+            
+            // Suggestion for missing using directive
+            if (errorLower.Contains("are you missing a using directive"))
+            {
+                suggestions.Add("Add the required using directive at the top of the file");
+            }
+            
+            // Suggestion for accessibility issues
+            if (errorLower.Contains("is inaccessible due to its protection level"))
+            {
+                suggestions.Add("Change the access modifier to public or internal, or use a public accessor method");
+            }
+            
+            // Suggestion for abstract member implementation
+            if (errorLower.Contains("does not implement inherited abstract member"))
+            {
+                var abstractMatch = System.Text.RegularExpressions.Regex.Match(error, @"'([^']+)'.*does not implement inherited abstract member\s+'([^']+)'");
+                if (abstractMatch.Success)
+                {
+                    suggestions.Add($"Implement abstract member '{abstractMatch.Groups[2].Value}' with override keyword");
+                }
+            }
+            
+            // Suggestion for wrong number of arguments
+            // Use explicit parentheses for operator precedence clarity
+            if (errorLower.Contains("no overload for method") || (errorLower.Contains("takes") && errorLower.Contains("arguments")))
+            {
+                suggestions.Add("Check the method signature and provide the correct number and types of arguments");
+            }
+        }
+        
+        // Remove duplicates and return
+        return suggestions.Distinct().ToList();
     }
 
     /// <summary>

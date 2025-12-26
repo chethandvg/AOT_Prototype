@@ -72,11 +72,19 @@ public partial class ParallelExecutionEngine
             await SaveCheckpointAsync(tasks, completedTasks);
         }
 
-        // Step 2: Combine all generated code (still needed for Roslyn validation fallback)
+        // Step 2: Generate draft documentation BEFORE batch validation
+        // This ensures documentation is available even if validation fails
+        Console.WriteLine("\n📝 Generating draft documentation for all tasks...");
+        await GenerateDraftSummariesForAllTasksAsync(tasks, completedTasks);
+        
+        // Save checkpoint with draft documentation
+        await SaveCheckpointAsync(tasks, completedTasks, "documentation_generated");
+
+        // Step 3: Combine all generated code (still needed for Roslyn validation fallback)
         Console.WriteLine("\n📋 Preparing for batch validation...");
         var combinedCode = CombineGeneratedCode(tasks);
         
-        // Step 3: Validate the combined code
+        // Step 4: Validate the combined code
         Console.WriteLine("\n🔍 Validating combined code (resolving inter-references)...");
         
         for (int attempt = 0; attempt < MaxRetries; attempt++)
@@ -114,11 +122,11 @@ public partial class ParallelExecutionEngine
                 {
                     task.ValidationErrors.Clear();
                     task.ValidationAttemptCount = attempt + 1;
+                    // Update documentation status from draft to final
+                    task.DocumentationStatus = "final";
                 }
                 Console.WriteLine("✅ Combined code validated successfully! All inter-references resolved.");
-                
-                // Generate summaries for all tasks after batch validation
-                await GenerateSummariesForAllTasksAsync(tasks, completedTasks);
+                Console.WriteLine("✅ Documentation status updated to 'final'.");
                 
                 // Save final checkpoint
                 await SaveCheckpointAsync(tasks, completedTasks, "completed");
@@ -129,6 +137,12 @@ public partial class ParallelExecutionEngine
             {
                 Console.WriteLine($"❌ Combined code validation failed (attempt {attempt + 1}/{MaxRetries})");
                 Console.WriteLine($"   Errors: {string.Join(", ", validationResult.Errors.Take(5))}");
+                
+                // Store validation errors in tasks for checkpoint and potential resume
+                StoreValidationErrorsInTasks(tasks, validationResult);
+                
+                // Save checkpoint with validation errors (for resume capability)
+                await SaveCheckpointAsync(tasks, completedTasks, "validation_failed");
                 
                 if (attempt < MaxRetries - 1)
                 {

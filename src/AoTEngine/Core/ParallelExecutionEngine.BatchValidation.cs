@@ -73,11 +73,19 @@ public partial class ParallelExecutionEngine
             await SaveCheckpointAsync(tasks, completedTasks);
         }
 
-        // Step 2: Combine all generated code (still needed for Roslyn validation fallback)
+        // Step 2: Generate draft documentation BEFORE validation
+        // This ensures documentation is available even if validation fails
+        Console.WriteLine("\n📝 Generating draft documentation for all tasks...");
+        await GenerateDraftSummariesForAllTasksAsync(tasks, completedTasks);
+        
+        // Save checkpoint with draft documentation
+        await SaveCheckpointAsync(tasks, completedTasks, "documentation_generated");
+
+        // Step 3: Combine all generated code (still needed for Roslyn validation fallback)
         Console.WriteLine("\n📋 Preparing for batch validation...");
         var combinedCode = CombineGeneratedCode(tasks);
         
-        // Step 3: Validate the combined code
+        // Step 4: Validate the combined code
         Console.WriteLine("\n🔍 Validating combined code (inter-references will be resolved)...");
         
         for (int attempt = 0; attempt < MaxRetries; attempt++)
@@ -116,11 +124,11 @@ public partial class ParallelExecutionEngine
                     task.IsValidated = true;
                     task.ValidationErrors.Clear();
                     task.ValidationAttemptCount = attempt + 1;
+                    // Update documentation status from draft to final
+                    task.DocumentationStatus = "final";
                 }
                 Console.WriteLine("✅ Combined code validated successfully! All inter-references resolved.");
-                
-                // Generate summaries for all tasks after batch validation
-                await GenerateSummariesForAllTasksAsync(tasks, completedTasks);
+                Console.WriteLine("✅ Documentation status updated to 'final'.");
                 
                 // Save final checkpoint
                 await SaveCheckpointAsync(tasks, completedTasks, "completed");
@@ -131,6 +139,12 @@ public partial class ParallelExecutionEngine
             {
                 Console.WriteLine($"❌ Combined code validation failed (attempt {attempt + 1}/{MaxRetries})");
                 Console.WriteLine($"   Errors: {string.Join(", ", validationResult.Errors.Take(3))}");
+                
+                // Store validation errors in tasks for checkpoint and potential resume
+                StoreValidationErrorsInTasks(tasks, validationResult);
+                
+                // Save checkpoint with validation errors (for resume capability)
+                await SaveCheckpointAsync(tasks, completedTasks, "validation_failed");
                 
                 if (attempt < MaxRetries - 1)
                 {
@@ -148,5 +162,47 @@ public partial class ParallelExecutionEngine
         }
 
         return tasks;
+    }
+
+    /// <summary>
+    /// Generates draft summaries for all tasks before validation.
+    /// Marks documentation status as "draft" until validation succeeds.
+    /// </summary>
+    private async Task GenerateDraftSummariesForAllTasksAsync(List<TaskNode> tasks, Dictionary<string, TaskNode> completedTasks)
+    {
+        if (_documentationService == null)
+        {
+            return;
+        }
+        
+        foreach (var task in tasks)
+        {
+            await GenerateTaskSummaryAsync(task, completedTasks);
+            task.DocumentationStatus = "draft";
+        }
+        
+        Console.WriteLine("✅ Draft documentation generated for all tasks.");
+    }
+
+    /// <summary>
+    /// Stores validation errors in tasks for checkpoint persistence and resume capability.
+    /// This allows the system to provide error context when regenerating code after a restart.
+    /// </summary>
+    private void StoreValidationErrorsInTasks(List<TaskNode> tasks, ValidationResult validationResult)
+    {
+        // Try to attribute errors to specific tasks
+        foreach (var task in tasks.Where(t => !string.IsNullOrWhiteSpace(t.GeneratedCode)))
+        {
+            var taskErrors = ExtractTaskRelevantErrors(task, validationResult.Errors);
+            if (taskErrors.Any())
+            {
+                task.ValidationErrors = taskErrors;
+            }
+            else if (!task.ValidationErrors.Any())
+            {
+                // If no specific errors found, store all errors for context
+                task.ValidationErrors = new List<string>(validationResult.Errors);
+            }
+        }
     }
 }

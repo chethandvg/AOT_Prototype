@@ -76,9 +76,14 @@ public class TaskNode
     public Dictionary<string, List<string>> ConsumedTypes { get; set; } = new();
 
     /// <summary>
-    /// Summary explanation of the task's generated code, generated after validation.
+    /// Summary explanation of the task's generated code.
     /// </summary>
     public string Summary { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Documentation status: "draft" (generated before validation) or "final" (validated successfully).
+    /// </summary>
+    public string DocumentationStatus { get; set; } = string.Empty;
 
     /// <summary>
     /// The model used to generate the summary (e.g., "gpt-4o-mini").

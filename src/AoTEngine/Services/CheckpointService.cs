@@ -135,7 +135,9 @@ public class CheckpointService
                 ValidationStatus = task.IsValidated ? "validated" : "pending",
                 ValidationAttempts = task.ValidationAttemptCount > 0 ? task.ValidationAttemptCount : task.RetryCount + 1,
                 CompletedAt = task.CompletedAtUtc ?? checkpoint.CheckpointTimestamp,
-                Summary = task.Summary
+                Summary = task.Summary,
+                ValidationErrors = task.ValidationErrors ?? new List<string>(),
+                DocumentationStatus = task.DocumentationStatus
             });
         }
 

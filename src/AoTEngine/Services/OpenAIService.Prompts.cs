@@ -126,116 +126,212 @@ Now generate the COMPLETE, ERROR-FREE C# code. Return ONLY the code without mark
     }
 
     /// <summary>
-    /// Gets the system prompt for code regeneration with enhanced instructions on the 3rd attempt.
+    /// Gets the system prompt for code regeneration with the "Code Repair Expert" pattern.
+    /// Enhanced to clearly instruct the LLM to repair/fix rather than rewrite.
     /// </summary>
     private string GetCodeRegenerationSystemPrompt(int attempt)
     {
         if (attempt < 2) // Attempts 0 and 1
         {
-            return @"You are an expert C# programmer. Fix the code based on the validation errors provided.
+            return @"You are a Code Repair Expert specializing in C# code correction.
+
+ROLE: You are tasked with FIXING code that failed validation, not rewriting it from scratch.
+
+APPROACH:
+1. Analyze the error messages to identify specific issues
+2. Make MINIMAL, TARGETED changes to fix each error
+3. Preserve the original code structure and intent
+4. Do NOT rewrite the entire logic if only specific fixes are needed
+5. Ensure fixes don't introduce new errors
+
+REPAIR GUIDELINES:
+- Fix syntax errors precisely at the problematic location
+- Add missing using directives at the top of the file
+- Correct type mismatches and namespace issues
+- Fix missing or incorrect method signatures
+- Maintain the original design pattern and architecture
+
 Generate clean, efficient, and well-documented C# code.
-Include necessary using statements and create complete, runnable code snippets.";
+Include all necessary using statements and create complete, runnable code.";
         }
         else // Attempt 2 (3rd attempt) - Enhanced prompt
         {
-            return @"You are a SENIOR EXPERT C# programmer specializing in DEBUGGING and ERROR RESOLUTION.
-This is the FINAL attempt - previous fixes have FAILED. Apply MAXIMUM EFFORT.
+            return @"You are a SENIOR CODE REPAIR EXPERT specializing in SURGICAL ERROR CORRECTION.
+This is the FINAL attempt - previous fixes have FAILED. Apply MAXIMUM PRECISION.
 
 CRITICAL MISSION:
-Fix ALL validation errors with SURGICAL PRECISION. This is the last chance to get it right.
+You must REPAIR the existing code to fix ALL validation errors. Do NOT rewrite from scratch.
 
-ERROR FIXING PROTOCOL:
-1. CAREFULLY analyze EACH error message
-2. Identify the ROOT CAUSE of each error
-3. Fix errors systematically, starting with fundamental issues
-4. Ensure fixes don't introduce new errors
-5. Verify type compatibility across ALL references
-6. Check for missing using directives
-7. Validate namespace consistency
-8. Ensure all member signatures are correct
-9. Test logic flow mentally before generating
+REPAIR PROTOCOL:
+1. ANALYZE: Carefully examine EACH error message to identify the root cause
+2. LOCATE: Pinpoint the exact line/type/member causing each error  
+3. FIX: Apply MINIMAL, TARGETED changes to resolve each specific issue
+4. VERIFY: Ensure your fix doesn't break other parts of the code
+5. PRESERVE: Maintain the original code structure, intent, and design
 
-COMMON ERROR PATTERNS TO CHECK:
-- Missing or incorrect using statements
-- Namespace mismatches
-- Type name typos or case sensitivity issues
-- Missing properties, methods, or constructors
-- Incorrect method signatures or return types
-- Null reference issues
-- Access modifier problems
-- Interface implementation issues
-- Generic type constraints
+ERROR CATEGORIES TO ADDRESS:
+- Missing using statements → Add at top of file
+- Namespace mismatches → Correct the namespace declaration
+- Type name errors → Fix spelling, casing, or full qualification
+- Missing members → Add required properties, methods, or constructors
+- Signature mismatches → Correct parameter types, return types
+- Access modifier issues → Adjust public/private/protected
+- Interface implementation → Implement all required members
 
-QUALITY ASSURANCE:
-- The fixed code MUST compile without errors
+QUALITY STANDARDS:
 - ALL validation errors MUST be resolved
-- Code must maintain production quality
+- The repaired code MUST compile successfully
+- Maintain production-quality code
 - Follow .NET 9 best practices
-- Use modern C# patterns
+- Preserve original functionality and intent
 
-This is your LAST CHANCE. Make it count.";
+This is your LAST CHANCE. Apply surgical precision to repair this code.";
         }
     }
 
     /// <summary>
-    /// Gets the user prompt for code regeneration with enhanced context on the 3rd attempt.
+    /// Gets the user prompt for code regeneration with the "Code Repair Expert" pattern.
+    /// Structures the prompt with sections: Original Intent, Failed Code, Error Log, Suggestions, Existing Types.
     /// </summary>
-    private string GetCodeRegenerationUserPrompt(string code, string errorsText, string warningsText, int attempt)
+    /// <param name="taskDescription">Original task description (the intent).</param>
+    /// <param name="taskNamespace">Target namespace for the task.</param>
+    /// <param name="expectedTypes">Expected types to be generated.</param>
+    /// <param name="code">The failed code to repair.</param>
+    /// <param name="errorsText">Validation errors.</param>
+    /// <param name="warningsText">Validation warnings.</param>
+    /// <param name="suggestionsText">Suggestions for fixing the code.</param>
+    /// <param name="existingTypeCode">Code from existing types that should be reused.</param>
+    /// <param name="attempt">Current attempt number.</param>
+    private string GetCodeRegenerationUserPrompt(
+        string taskDescription, 
+        string taskNamespace,
+        List<string> expectedTypes,
+        string code, 
+        string errorsText, 
+        string warningsText,
+        string suggestionsText,
+        string? existingTypeCode,
+        int attempt)
     {
+        var expectedTypesStr = expectedTypes.Any() ? string.Join(", ", expectedTypes) : "Not specified";
+        var namespaceStr = !string.IsNullOrEmpty(taskNamespace) ? taskNamespace : "Not specified";
+        
+        // Build suggestions section if available
+        var suggestionsSection = !string.IsNullOrWhiteSpace(suggestionsText) 
+            ? $@"
+
+=== INPUT 4: SUGGESTIONS (Recommended Fixes) ===
+{suggestionsText}
+" 
+            : "";
+        
+        // Build existing types section if available (for duplicate type handling)
+        var existingTypesSection = !string.IsNullOrWhiteSpace(existingTypeCode)
+            ? $@"
+
+=== INPUT 5: EXISTING TYPES (REUSE This Code - Do NOT Recreate) ===
+⚠️ IMPORTANT: The following types already exist in other tasks. You MUST reuse them instead of creating new definitions.
+- Do NOT redefine these types
+- Only ADD new functionality if needed (extend, don't replace)
+- Reference these types directly in your code
+- If you need to add members, ensure they don't conflict with existing ones
+
+```csharp
+{existingTypeCode}
+```
+"
+            : "";
+        
         if (attempt < 2) // Attempts 0 and 1
         {
-            return $@"The following code has validation errors:
+            return $@"You previously generated code that failed validation. Please REPAIR this code.
 
-Code:
+=== ORIGINAL INTENT (Task Requirements) ===
+Task Description: {taskDescription}
+Target Namespace: {namespaceStr}
+Expected Types: {expectedTypesStr}
+
+=== INPUT 1: FAILED CODE (Current Code That Needs Repair) ===
+```csharp
 {code}
+```
 
-Errors:
+=== INPUT 2: ERROR LOG (Specific Validation Errors To Fix) ===
+```
 {errorsText}
+```
 
-Warnings:
+=== INPUT 3: WARNINGS (Should Be Addressed If Possible) ===
+```
 {warningsText}
+```
+{suggestionsSection}{existingTypesSection}
+=== INSTRUCTIONS ===
+Analyze the Error Log and modify the Failed Code to fix these SPECIFIC issues:
+- Maintain the ORIGINAL INTENT as described above
+- Do NOT rewrite the entire logic unless absolutely necessary
+- Make MINIMAL, TARGETED changes to fix each error
+- Preserve the original code structure and design
+- Ensure all using statements are present
+- Verify namespace and type names are correct
+- If EXISTING TYPES are provided, REUSE them - do not recreate
+- Follow the SUGGESTIONS if provided
 
-Fix the code and return ONLY the corrected C# code without any markdown formatting or explanations.";
+Return ONLY the corrected C# code without any markdown formatting or explanations.";
         }
         else // Attempt 2 (3rd attempt) - Enhanced prompt with detailed analysis
         {
-            return $@"🚨 FINAL ATTEMPT #{attempt + 1} - This is your LAST CHANCE to fix the errors. 🚨
+            return $@"🚨 FINAL REPAIR ATTEMPT #{attempt + 1} - Previous fixes were insufficient. Apply MAXIMUM PRECISION. 🚨
 
-CURRENT CODE WITH ERRORS:
+=== ORIGINAL INTENT (Task Requirements - MUST Be Preserved) ===
+Task Description: {taskDescription}
+Target Namespace: {namespaceStr}
+Expected Types: {expectedTypesStr}
+
+=== INPUT 1: FAILED CODE (Code That Has Failed {attempt + 1} Times) ===
+```csharp
 {code}
+```
 
-=== VALIDATION ERRORS (MUST ALL BE FIXED) ===
+=== INPUT 2: ERROR LOG (ALL Errors MUST Be Fixed) ===
+```
 {errorsText}
+```
 
-=== WARNINGS (SHOULD BE ADDRESSED) ===
+=== INPUT 3: WARNINGS (Should Be Addressed) ===
+```
 {warningsText}
+```
+{suggestionsSection}{existingTypesSection}
+=== SYSTEMATIC REPAIR APPROACH ===
+For EACH error in the Error Log:
+1. Read the error message carefully
+2. Identify the exact location (line number, type, member)
+3. Determine the root cause (missing import, wrong type, typo, etc.)
+4. Apply the MINIMAL fix needed to resolve it
+5. Verify the fix doesn't break other code
 
-SYSTEMATIC FIX APPROACH:
-1. Read each error message carefully
-2. Locate the exact line/type causing the error
-3. Determine the root cause (missing using, wrong type, typo, etc.)
-4. Apply the fix precisely
-5. Ensure the fix doesn't break other parts of the code
-6. Verify all types and namespaces are correct
+=== REPAIR CHECKLIST ===
+☐ All required using statements present?
+☐ Namespace declaration correct?
+☐ All type names spelled correctly and match exactly?
+☐ All required properties and methods implemented?
+☐ Method signatures correct (parameters, return types)?
+☐ Access modifiers appropriate?
+☐ No typos in member names?
+☐ All dependencies correctly referenced?
+☐ Existing types reused (not recreated)?
+☐ Suggestions followed where applicable?
 
-ERROR ANALYSIS CHECKLIST:
-☐ Are all required using statements present?
-☐ Are all type names spelled correctly and match exactly?
-☐ Are all namespaces correct and consistent?
-☐ Are all required properties and methods implemented?
-☐ Are method signatures correct (parameters, return types)?
-☐ Are access modifiers appropriate?
-☐ Are there any typos in member names?
-☐ Are all dependencies correctly referenced?
+=== CRITICAL REMINDER ===
+- This code has failed validation {attempt + 1} times
+- EVERY error in the Error Log MUST be fixed
+- Make MINIMAL changes - don't rewrite unnecessarily  
+- The repaired code MUST compile and validate successfully
+- Previous repair attempts were insufficient - be MORE THOROUGH
+- If EXISTING TYPES are provided, you MUST use them - do NOT recreate
 
-CRITICAL REMINDER:
-- This code failed validation {attempt + 1} times already
-- Every error MUST be fixed in this attempt
-- No new errors can be introduced
-- The code MUST compile and validate successfully
-- Previous attempts were insufficient - be MORE THOROUGH
-
-Generate the COMPLETELY FIXED code now. Return ONLY the corrected C# code without any markdown formatting or explanations.";
+Generate the COMPLETELY REPAIRED code now. Return ONLY the corrected C# code without any markdown formatting or explanations.";
         }
     }
 }
