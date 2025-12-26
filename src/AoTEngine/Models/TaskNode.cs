@@ -104,4 +104,9 @@ public class TaskNode
     /// UTC timestamp when the task was completed.
     /// </summary>
     public DateTime? CompletedAtUtc { get; set; }
+
+    /// <summary>
+    /// Associated response chain node for hierarchical decomposition.
+    /// </summary>
+    public ResponseChainNode? ChainNode { get; set; }
 }
