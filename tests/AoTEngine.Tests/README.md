@@ -1,50 +1,68 @@
 # AoTEngine.Tests
 
-This folder contains unit tests for the AoT Engine components.
+Unit tests for the AoT Engine components.
 
-## Test Files
+## Overview
 
-### Core Tests
-- `ParallelExecutionEngineTests.cs` - Tests for parallel task execution
-- `TaskComplexityAnalyzerTests.cs` - Tests for complexity analysis and decomposition
-- `TaskNodeTests.cs` - Tests for task node model
+This project contains comprehensive tests for all AoT Engine components, organized by the service categories they test.
 
-### Service Tests
-- `CodeValidatorServiceTests.cs` - Tests for Roslyn-based code validation
-- `CodeMergerServiceTests.cs` - Tests for code merging and integration
-- `DocumentationServiceTests.cs` - Tests for documentation generation and export
-- `ProjectBuildServiceTests.cs` - Tests for project creation and building
-- `ProjectBuildServiceTests.Validation.cs` - Tests for build validation
+## Test Categories
 
-### Integration Tests
-- `IntegrationFixerTests.cs` - Tests for auto-fix capabilities
-- `IntegrationCheckpointHandlerTests.cs` - Tests for checkpoint handling
-- `CheckpointIntegrationTests.cs` - Integration tests for checkpointing
-- `CheckpointServiceTests.cs` - Tests for checkpoint service
+### Core Layer Tests
 
-### Contract-First Tests (NEW)
-- `ContractCatalogTests.cs` - Tests for ContractCatalog, EnumContract, InterfaceContract, ModelContract, AbstractClassContract:
-  - Enum code generation with members and values
-  - Interface code generation with methods, properties, type constraints
-  - Model code generation (class and record)
-  - Abstract class code generation
-  - Sealed class generation (IsSealed=true generates sealed class, not abstract)
-  - ContractCatalog freeze and lookup operations
-  - JSON serialization/deserialization
+| Test File | Tests For |
+|-----------|-----------|
+| `ParallelExecutionEngineTests.cs` | Parallel task execution engine |
+| `TaskNodeTests.cs` | Task node model |
 
-- `PromptContextBuilderTests.cs` - Tests for PromptContextBuilder:
-  - BuildCodeGenerationContext with contracts and guardrails
-  - BuildInterfaceImplementationContext with method signatures
-  - BuildEnumUsageContext with valid members
-  - ValidateAgainstContracts for detecting violations
+### AI Service Tests
 
-### Symbol Table Tests
-- `TypeRegistryAndSymbolTableTests.cs` - Tests for TypeRegistry and SymbolTable:
-  - Type registration and lookup
-  - Conflict detection
-  - Symbol collision detection (NEW)
-  - Namespace validation (NEW)
-  - Alias generation (NEW)
+| Test File | Tests For |
+|-----------|-----------|
+| `PromptContextBuilderTests.cs` | Prompt context building with contracts |
+
+### Compilation Service Tests
+
+| Test File | Tests For |
+|-----------|-----------|
+| `ProjectBuildServiceTests.cs` | Project creation and building |
+| `ProjectBuildServiceTests.Validation.cs` | Build validation |
+
+### Contract Service Tests
+
+| Test File | Tests For |
+|-----------|-----------|
+| `ContractCatalogTests.cs` | Contract catalog, enum/interface/model contracts |
+
+### Documentation Service Tests
+
+| Test File | Tests For |
+|-----------|-----------|
+| `DocumentationServiceTests.cs` | Documentation generation and export |
+| `CheckpointServiceTests.cs` | Checkpoint service |
+| `CheckpointIntegrationTests.cs` | Checkpoint integration tests |
+
+### Integration Service Tests
+
+| Test File | Tests For |
+|-----------|-----------|
+| `CodeMergerServiceTests.cs` | Code merging and integration |
+| `IntegrationFixerTests.cs` | Auto-fix capabilities |
+| `IntegrationCheckpointHandlerTests.cs` | Checkpoint handling |
+| `TaskComplexityAnalyzerTests.cs` | Complexity analysis |
+| `RegenerationSuggestionsTests.cs` | Task regeneration |
+
+### Validation Service Tests
+
+| Test File | Tests For |
+|-----------|-----------|
+| `CodeValidatorServiceTests.cs` | Roslyn-based code validation |
+
+### Model Tests
+
+| Test File | Tests For |
+|-----------|-----------|
+| `TypeRegistryAndSymbolTableTests.cs` | Type registry and symbol table |
 
 ## Running Tests
 
@@ -58,17 +76,18 @@ dotnet test --verbosity normal
 # Run specific test file
 dotnet test --filter "FullyQualifiedName~ContractCatalogTests"
 
-# Run Contract-First related tests
-dotnet test --filter "FullyQualifiedName~ContractCatalog|FullyQualifiedName~PromptContextBuilder"
+# Run tests by category
+dotnet test --filter "FullyQualifiedName~Integration"
+dotnet test --filter "FullyQualifiedName~Contract"
 ```
 
 ## Test Coverage
 
-- **Total Tests**: 120
+- **Total Tests**: 131
 - **Core Tests**: ~25
-- **Service Tests**: ~50
-- **Integration Tests**: ~8
-- **Contract-First Tests**: ~37 (NEW)
+- **Service Tests**: ~60
+- **Integration Tests**: ~10
+- **Contract-First Tests**: ~36
 
 ## Design Principles
 
@@ -76,3 +95,4 @@ dotnet test --filter "FullyQualifiedName~ContractCatalog|FullyQualifiedName~Prom
 - Each test file corresponds to a source file
 - Mock external dependencies (OpenAI API)
 - Use meaningful test names describing behavior
+- Tests are deterministic and repeatable
