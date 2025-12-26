@@ -1,6 +1,8 @@
 using AoTEngine.Models;
 using Newtonsoft.Json;
 using OpenAI.Chat;
+using System.Net.Http.Headers;
+using System.Text;
 
 namespace AoTEngine.Services;
 
@@ -21,7 +23,8 @@ namespace AoTEngine.Services;
 public partial class OpenAIService
 {
     private readonly ChatClient _chatClient;
-    private readonly ChatClient _codeGenChatClient; // Separate client for code generation with codex-max
+    private readonly HttpClient _codeGenHttpClient; // Use HttpClient for code generation instead of OpenAI SDK
+    private readonly string _codeGenModel = "gpt-5.1-codex";
     private const int MaxRetries = 3;
     
     // Regex for validating semantic version format - compiled once for efficiency
@@ -32,8 +35,57 @@ public partial class OpenAIService
     public OpenAIService(string apiKey, string model = "gpt-5.1")
     {
         _chatClient = new ChatClient(model, apiKey);
-        // Use gpt-5.1-codex for code generation phase
-        _codeGenChatClient = new ChatClient("gpt-5.1-codex", apiKey);
+        
+        // Use HttpClient for code generation phase with gpt-5.1-codex
+        _codeGenHttpClient = new HttpClient();
+        _codeGenHttpClient.BaseAddress = new Uri("https://api.openai.com/v1/");
+        _codeGenHttpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
+        _codeGenHttpClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+    }
+
+    /// <summary>
+    /// Helper method to call OpenAI Chat Completion API using HttpClient for code generation.
+    /// </summary>
+    private async Task<string> CallCodeGenChatCompletionAsync(List<ChatMessage> messages)
+    {
+        var requestBody = new
+        {
+            model = _codeGenModel,
+            messages = messages.Select(m => new
+            {
+                role = m switch
+                {
+                    SystemChatMessage => "system",
+                    UserChatMessage => "user",
+                    AssistantChatMessage => "assistant",
+                    _ => "user"
+                },
+                content = m switch
+                {
+                    SystemChatMessage sys => sys.Content[0].Text,
+                    UserChatMessage usr => usr.Content[0].Text,
+                    AssistantChatMessage ast => ast.Content[0].Text,
+                    _ => ""
+                }
+            }).ToList()
+        };
+
+        var jsonContent = JsonConvert.SerializeObject(requestBody);
+        var httpContent = new StringContent(jsonContent, Encoding.UTF8, "application/json");
+
+        var response = await _codeGenHttpClient.PostAsync("chat/completions", httpContent);
+        response.EnsureSuccessStatusCode();
+
+        var responseBody = await response.Content.ReadAsStringAsync();
+        var result = JsonConvert.DeserializeObject<dynamic>(responseBody);
+        
+        if (result == null || result.choices == null || result.choices.Count == 0)
+        {
+            throw new InvalidOperationException("OpenAI API returned no choices in response.");
+        }
+
+        string? content = result.choices[0]?.message?.content;
+        return content ?? throw new InvalidOperationException("OpenAI API returned null content.");
     }
 
     /// <summary>

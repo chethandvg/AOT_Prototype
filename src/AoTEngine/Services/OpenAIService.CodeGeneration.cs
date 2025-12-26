@@ -68,21 +68,8 @@ public partial class OpenAIService
                     new UserChatMessage(userPrompt)
                 };
 
-                // Use gpt-4.5-codex-max for code generation
-                var completion = await _codeGenChatClient.CompleteChatAsync(messages);
-                var contentParts = completion.Value.Content;
-                
-                if (contentParts == null || contentParts.Count == 0)
-                {
-                    if (attempt == MaxRetries - 1)
-                    {
-                        throw new InvalidOperationException("OpenAI chat completion returned no content.");
-                    }
-                    await Task.Delay(1000 * (attempt + 1));
-                    continue;
-                }
-
-                var generatedCode = contentParts[0].Text.Trim();
+                // Use HttpClient for code generation
+                var generatedCode = (await CallCodeGenChatCompletionAsync(messages)).Trim();
                 
                 // Extract and store type contract after generation
                 task.TypeContract = ExtractTypeContract(generatedCode);
@@ -157,21 +144,8 @@ public partial class OpenAIService
                     new UserChatMessage(userPrompt)
                 };
 
-                // Use gpt-4.5-codex-max for code regeneration
-                var completion = await _codeGenChatClient.CompleteChatAsync(messages);
-                var contentParts = completion.Value.Content;
-                
-                if (contentParts == null || contentParts.Count == 0)
-                {
-                    if (attempt == MaxRetries - 1)
-                    {
-                        throw new InvalidOperationException("OpenAI chat completion returned no content.");
-                    }
-                    await Task.Delay(1000 * (attempt + 1));
-                    continue;
-                }
-
-                var regeneratedCode = contentParts[0].Text.Trim();
+                // Use HttpClient for code regeneration
+                var regeneratedCode = (await CallCodeGenChatCompletionAsync(messages)).Trim();
                 
                 // Update type contract after regeneration
                 task.TypeContract = ExtractTypeContract(regeneratedCode);

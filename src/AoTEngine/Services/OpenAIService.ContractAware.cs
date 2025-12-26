@@ -59,20 +59,8 @@ public partial class OpenAIService
                     new UserChatMessage(userPrompt)
                 };
 
-                var completion = await _codeGenChatClient.CompleteChatAsync(messages);
-                var contentParts = completion.Value.Content;
-
-                if (contentParts == null || contentParts.Count == 0)
-                {
-                    if (attempt == MaxRetries - 1)
-                    {
-                        throw new InvalidOperationException("OpenAI chat completion returned no content.");
-                    }
-                    await Task.Delay(1000 * (attempt + 1));
-                    continue;
-                }
-
-                var generatedCode = CleanGeneratedCode(contentParts[0].Text);
+                var content = await CallCodeGenChatCompletionAsync(messages);
+                var generatedCode = CleanGeneratedCode(content);
 
                 // Validate against contracts
                 var contractViolations = _promptContextBuilder.ValidateAgainstContracts(generatedCode, task);
@@ -278,20 +266,8 @@ Return ONLY the fixed C# code without any markdown formatting or explanations.";
         {
             try
             {
-                var completion = await _codeGenChatClient.CompleteChatAsync(messages);
-                var contentParts = completion.Value.Content;
-
-                if (contentParts == null || contentParts.Count == 0)
-                {
-                    if (attempt == MaxRetries - 1)
-                    {
-                        throw new InvalidOperationException("OpenAI chat completion returned no content.");
-                    }
-                    await Task.Delay(1000 * (attempt + 1));
-                    continue;
-                }
-
-                var fixedCode = CleanGeneratedCode(contentParts[0].Text);
+                var content = await CallCodeGenChatCompletionAsync(messages);
+                var fixedCode = CleanGeneratedCode(content);
                 task.TypeContract = ExtractTypeContract(fixedCode);
 
                 return fixedCode;
