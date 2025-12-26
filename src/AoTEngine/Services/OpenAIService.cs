@@ -29,11 +29,11 @@ public partial class OpenAIService
         new System.Text.RegularExpressions.Regex(@"^\d+\.\d+(\.\d+)?(\.\d+)?(-[\w.]+)?(\+[\w.]+)?$", 
             System.Text.RegularExpressions.RegexOptions.Compiled);
 
-    public OpenAIService(string apiKey, string model = "gpt-4")
+    public OpenAIService(string apiKey, string model = "gpt-5.1")
     {
         _chatClient = new ChatClient(model, apiKey);
-        // Use gpt-4.5-codex-max for code generation phase
-        _codeGenChatClient = new ChatClient("gpt-5.2", apiKey);
+        // Use gpt-5.1-codex for code generation phase
+        _codeGenChatClient = new ChatClient("gpt-5.1-codex", apiKey);
     }
 
     /// <summary>
