@@ -101,7 +101,8 @@ public partial class OpenAIService
     }
 
     /// <summary>
-    /// Regenerates code with validation errors as feedback.
+    /// Regenerates code with validation errors as feedback using the "Code Repair Expert" pattern.
+    /// Provides the LLM with original intent, failed code, and error log for targeted repairs.
     /// Filters out namespace and type not found errors as these will be resolved in batch validation.
     /// </summary>
     public async Task<string> RegenerateCodeWithErrorsAsync(TaskNode task, ValidationResult validationResult)
@@ -123,9 +124,16 @@ public partial class OpenAIService
         {
             try
             {
-                // Use enhanced prompt on the 3rd attempt
+                // Use "Code Repair Expert" pattern with original intent, failed code, and error log
                 var systemPrompt = GetCodeRegenerationSystemPrompt(attempt);
-                var userPrompt = GetCodeRegenerationUserPrompt(task.GeneratedCode, errorsText, warningsText, attempt);
+                var userPrompt = GetCodeRegenerationUserPrompt(
+                    task.Description,
+                    task.Namespace,
+                    task.ExpectedTypes,
+                    task.GeneratedCode, 
+                    errorsText, 
+                    warningsText, 
+                    attempt);
 
                 var messages = new List<ChatMessage>
                 {
