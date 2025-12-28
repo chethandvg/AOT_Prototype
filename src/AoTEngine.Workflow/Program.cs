@@ -125,18 +125,35 @@ if (string.IsNullOrWhiteSpace(userRequest))
 }
 else
 {
-    // Basic input sanitization
+    // Basic input sanitization - do sanitization first before length checks
     userRequest = userRequest.Trim();
     
-    // Validate input length
+    // Remove potentially harmful control characters
+    userRequest = System.Text.RegularExpressions.Regex.Replace(
+        userRequest,
+        @"[\x00-\x08\x0B\x0C\x0E-\x1F]",
+        string.Empty);
+
+    // Ensure input is still meaningful after sanitization
+    if (string.IsNullOrWhiteSpace(userRequest))
+    {
+        Console.WriteLine("Error: Request is empty after removing unsupported characters. Please provide a valid request.");
+        return 1;
+    }
+
+    // Reject excessively long repeated character sequences that may indicate abuse
+    if (System.Text.RegularExpressions.Regex.IsMatch(userRequest, @"(.)\1{199,}"))
+    {
+        Console.WriteLine("Error: Request contains excessively repeated characters. Please simplify your request.");
+        return 1;
+    }
+
+    // Validate input length after sanitization
     if (userRequest.Length > 2000)
     {
         Console.WriteLine("Error: Request is too long. Please limit your request to 2000 characters.");
         return 1;
     }
-    
-    // Remove potentially harmful characters
-    userRequest = System.Text.RegularExpressions.Regex.Replace(userRequest, @"[\x00-\x08\x0B\x0C\x0E-\x1F]", string.Empty);
 }
 
 Console.WriteLine();

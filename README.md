@@ -92,7 +92,7 @@ The AoT Engine is a sophisticated C# application that leverages OpenAI's GPT mod
 
 ## Architecture
 
-> **🎯 Modular Design**: The AoT Engine has been refactored into **10 separate class library projects** for maximum reusability and flexibility. See **[MODULAR_ARCHITECTURE.md](MODULAR_ARCHITECTURE.md)** for details on creating custom workflows.
+> **🎯 Modular Design**: The AoT Engine has been refactored into **9 separate class library projects**, plus the `AoTEngine.Workflow` executable and the main AoTEngine CLI, for maximum reusability and flexibility. See **[MODULAR_ARCHITECTURE.md](MODULAR_ARCHITECTURE.md)** for details on creating custom workflows.
 
 **Module Overview**:
 ```

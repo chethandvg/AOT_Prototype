@@ -203,14 +203,9 @@ public class CoordinatedWorkflowOrchestrator
             Console.WriteLine("🚀 PHASE 6: Executing Tasks with Iterative Verification");
             Console.WriteLine("═══════════════════════════════════════════════════════════");
 
-            if (_config.EnableIterativeVerification)
-            {
-                tasks = await ExecuteWithIterativeVerificationAsync(tasks, context, outputDirectory);
-            }
-            else
-            {
-                tasks = await _executionEngine.ExecuteTasksWithHybridValidationAsync(tasks);
-            }
+            tasks = _config.EnableIterativeVerification
+                ? await ExecuteWithIterativeVerificationAsync(tasks, context, outputDirectory)
+                : await _executionEngine.ExecuteTasksWithHybridValidationAsync(tasks);
 
             // Store results in shared context
             foreach (var task in tasks.Where(t => t.IsCompleted))
@@ -301,24 +296,15 @@ public class CoordinatedWorkflowOrchestrator
     /// </summary>
     private List<TaskNode> ConvertBlueprintToTasks(ProjectBlueprint blueprint, SharedContext context)
     {
-        var tasks = new List<TaskNode>();
-
-        foreach (var blueprintTask in blueprint.Tasks)
+        return blueprint.Tasks.Select(blueprintTask => new TaskNode
         {
-            var task = new TaskNode
-            {
-                Id = blueprintTask.Id,
-                Description = blueprintTask.Description,
-                Dependencies = blueprintTask.Dependencies,
-                Namespace = blueprintTask.Component,
-                ExpectedTypes = blueprintTask.ExpectedOutputs,
-                Context = context.GetContextForTask(blueprintTask.Id, blueprintTask.Dependencies)
-            };
-
-            tasks.Add(task);
-        }
-
-        return tasks;
+            Id = blueprintTask.Id,
+            Description = blueprintTask.Description,
+            Dependencies = blueprintTask.Dependencies,
+            Namespace = blueprintTask.Component,
+            ExpectedTypes = blueprintTask.ExpectedOutputs,
+            Context = context.GetContextForTask(blueprintTask.Id, blueprintTask.Dependencies)
+        }).ToList();
     }
 
     /// <summary>
@@ -330,7 +316,6 @@ public class CoordinatedWorkflowOrchestrator
         string? outputDirectory)
     {
         var completedTasks = new HashSet<string>();
-        var taskMap = tasks.ToDictionary(t => t.Id);
 
         while (completedTasks.Count < tasks.Count)
         {
@@ -342,75 +327,89 @@ public class CoordinatedWorkflowOrchestrator
 
             if (!readyTasks.Any())
             {
-                // Check for deadlock
+                // Check for deadlock with detailed dependency info
                 var pendingTasks = tasks.Where(t => !completedTasks.Contains(t.Id)).ToList();
+                var pendingWithUnmetDeps = pendingTasks.Select(t =>
+                {
+                    var unmetDeps = t.Dependencies
+                        .Where(d => !completedTasks.Contains(d))
+                        .ToList();
+                    var unmetDepsText = unmetDeps.Any()
+                        ? string.Join(", ", unmetDeps)
+                        : "none";
+                    return $"{t.Id} (waiting for: {unmetDepsText})";
+                });
+
                 throw new InvalidOperationException(
                     $"Workflow deadlock: {pendingTasks.Count} tasks cannot be executed. " +
-                    $"Pending: {string.Join(", ", pendingTasks.Select(t => t.Id))}");
+                    $"Pending: {string.Join(", ", pendingTasks.Select(t => t.Id))}. " +
+                    $"Pending task dependencies: {string.Join("; ", pendingWithUnmetDeps)}");
             }
 
             // Execute ready tasks in parallel
             var executionTasks = readyTasks.Select(async task =>
             {
-                Console.WriteLine($"\n▶️  Executing task: {task.Id}");
-                Console.WriteLine($"   Description: {task.Description}");
+                // Create a local copy to avoid closure-related issues
+                var currentTask = task;
+
+                Console.WriteLine($"\n▶️  Executing task: {currentTask.Id}");
+                Console.WriteLine($"   Description: {currentTask.Description}");
 
                 // Update task context with latest shared context
-                task.Context = context.GetContextForTask(task.Id, task.Dependencies);
+                currentTask.Context = context.GetContextForTask(currentTask.Id, currentTask.Dependencies);
 
-                // Generate code
-                var completedTasksDict = context.IntermediateResults
-                    .ToDictionary(
-                        kvp => kvp.Key,
-                        kvp => tasks.First(t => t.Id == kvp.Key));
-                task.GeneratedCode = await _openAIService.GenerateCodeAsync(task, completedTasksDict);
+                // Generate code - build dictionary from tasks that exist in IntermediateResults
+                var completedTasksDict = tasks
+                    .Where(t => context.IntermediateResults.ContainsKey(t.Id))
+                    .ToDictionary(t => t.Id, t => t);
+                currentTask.GeneratedCode = await _openAIService.GenerateCodeAsync(currentTask, completedTasksDict);
 
                 // Verify immediately after generation
-                Console.WriteLine($"   🔍 Verifying task {task.Id}...");
-                var validation = await _validatorService.ValidateCodeAsync(task.GeneratedCode);
+                Console.WriteLine($"   🔍 Verifying task {currentTask.Id}...");
+                var validation = await _validatorService.ValidateCodeAsync(currentTask.GeneratedCode);
 
                 int attempts = 1;
                 while (!validation.IsValid && attempts < _config.MaxRetries)
                 {
                     Console.WriteLine($"   ⚠️  Validation failed (attempt {attempts}), regenerating...");
 
-                    task.GeneratedCode = await _openAIService.RegenerateCodeWithErrorsAsync(
-                        task,
+                    currentTask.GeneratedCode = await _openAIService.RegenerateCodeWithErrorsAsync(
+                        currentTask,
                         validation);
 
-                    validation = await _validatorService.ValidateCodeAsync(task.GeneratedCode);
+                    validation = await _validatorService.ValidateCodeAsync(currentTask.GeneratedCode);
                     attempts++;
                 }
 
-                task.IsCompleted = true;
-                task.IsValidated = validation.IsValid;
-                task.ValidationErrors = validation.Errors;
-                task.ValidationAttemptCount = attempts;
-                task.CompletedAtUtc = DateTime.UtcNow;
+                currentTask.IsCompleted = true;
+                currentTask.IsValidated = validation.IsValid;
+                currentTask.ValidationErrors = validation.Errors;
+                currentTask.ValidationAttemptCount = attempts;
+                currentTask.CompletedAtUtc = DateTime.UtcNow;
 
                 if (validation.IsValid)
                 {
-                    Console.WriteLine($"   ✅ Task {task.Id} completed and verified");
+                    Console.WriteLine($"   ✅ Task {currentTask.Id} completed and verified");
 
                     // Store in shared context for subsequent tasks
-                    context.IntermediateResults[task.Id] = new TaskResult
+                    context.IntermediateResults[currentTask.Id] = new TaskResult
                     {
-                        TaskId = task.Id,
-                        GeneratedCode = task.GeneratedCode,
+                        TaskId = currentTask.Id,
+                        GeneratedCode = currentTask.GeneratedCode,
                         IsValidated = true,
                         AttemptCount = attempts,
                         CompletedAtUtc = DateTime.UtcNow
                     };
 
                     // Extract and register types
-                    ExtractAndRegisterTypes(task, context);
+                    ExtractAndRegisterTypes(currentTask, context);
                 }
                 else
                 {
-                    Console.WriteLine($"   ❌ Task {task.Id} failed validation after {attempts} attempts");
+                    Console.WriteLine($"   ❌ Task {currentTask.Id} failed validation after {attempts} attempts");
                 }
 
-                return task;
+                return currentTask;
             });
 
             await Task.WhenAll(executionTasks);
@@ -466,22 +465,19 @@ public class CoordinatedWorkflowOrchestrator
                 pattern,
                 System.Text.RegularExpressions.RegexOptions.Multiline);
 
-            foreach (System.Text.RegularExpressions.Match match in matches)
+            foreach (var match in matches.Where(m => m.Success && m.Groups.Count > 1))
             {
-                if (match.Success && match.Groups.Count > 1)
+                var name = match.Groups[1].Value;
+                if (!string.IsNullOrEmpty(name))
                 {
-                    var name = match.Groups[1].Value;
-                    if (!string.IsNullOrEmpty(name))
+                    context.RegisterType(new TypeDefinition
                     {
-                        context.RegisterType(new TypeDefinition
-                        {
-                            Name = name,
-                            Namespace = currentNamespace,
-                            FullyQualifiedName = $"{currentNamespace}.{name}",
-                            Kind = kind,
-                            DefinedByTaskId = task.Id
-                        });
-                    }
+                        Name = name,
+                        Namespace = currentNamespace,
+                        FullyQualifiedName = $"{currentNamespace}.{name}",
+                        Kind = kind,
+                        DefinedByTaskId = task.Id
+                    });
                 }
             }
         }

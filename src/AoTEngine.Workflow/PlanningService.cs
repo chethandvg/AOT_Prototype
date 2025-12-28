@@ -14,7 +14,6 @@ public class PlanningService
 {
     private readonly OpenAIService _openAIService;
     private readonly UserInteractionService _userInteractionService;
-    private const int MaxRetries = 3;
 
     public PlanningService(OpenAIService openAIService, UserInteractionService userInteractionService)
     {
@@ -175,47 +174,14 @@ public class PlanningService
     }
 
     /// <summary>
-    /// Uses LLM to identify uncertainties and generate clarifying questions.
+    /// Generates clarifying questions based on the user request.
+    /// Uses heuristics to identify common areas that need clarification.
     /// </summary>
-    private async Task<List<(string Question, string Category)>> GenerateClarifyingQuestionsAsync(string userRequest)
+    private Task<List<(string Question, string Category)>> GenerateClarifyingQuestionsAsync(string userRequest)
     {
-        var systemPrompt = @"You are an expert requirements analyst. Analyze the user's request and identify areas of uncertainty that need clarification before coding can begin.
-
-Generate clarifying questions for:
-1. Ambiguous requirements
-2. Missing technical specifications
-3. Edge cases that need clarification
-4. Security or performance requirements
-5. Integration points with external systems
-6. Data format and validation requirements
-
-Output JSON in this format:
-{
-  ""questions"": [
-    {
-      ""question"": ""What authentication method should be used?"",
-      ""category"": ""Security""
-    }
-  ]
-}
-
-If the requirements are clear and complete, return an empty questions array.
-Return ONLY valid JSON.";
-
-        var userPrompt = $"Analyze this request and generate clarifying questions:\n\n{userRequest}";
-
-        var response = await _openAIService.DecomposeTaskAsync(new TaskDecompositionRequest
-        {
-            OriginalRequest = userPrompt,
-            Context = systemPrompt
-        });
-
-        // Parse the response to extract questions
-        // This is a simplified version - in production, you'd want more robust parsing
         var questions = new List<(string Question, string Category)>();
 
-        // The decomposition response will contain tasks, but we need to adapt this
-        // For now, return common clarifying questions based on the request
+        // Generate clarifying questions based on request analysis
         if (userRequest.Length < 100)
         {
             questions.Add(("Could you provide more details about the expected functionality?", "Scope"));
@@ -232,7 +198,7 @@ Return ONLY valid JSON.";
             questions.Add(("What error handling strategy should be used?", "Error Handling"));
         }
 
-        return questions;
+        return Task.FromResult(questions);
     }
 
     /// <summary>
@@ -357,22 +323,18 @@ IMPORTANT: Each task must generate no more than {maxLinesPerTask} lines of code.
             @"(\w+)(?:Project|App|System|Service|Application|Api)"
         };
 
-        foreach (var pattern in regexPatterns)
-        {
-            var match = System.Text.RegularExpressions.Regex.Match(
+        var matchResult = regexPatterns
+            .Select(pattern => System.Text.RegularExpressions.Regex.Match(
                 request, 
                 pattern, 
-                System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-            
-            if (match.Success && match.Groups.Count > 1)
-            {
-                var extracted = match.Groups[1].Value.Trim();
-                if (!string.IsNullOrEmpty(extracted))
-                {
-                    // Clean up and format as Pascal case
-                    return FormatAsProjectName(extracted);
-                }
-            }
+                System.Text.RegularExpressions.RegexOptions.IgnoreCase))
+            .Where(match => match.Success && match.Groups.Count > 1)
+            .Select(match => match.Groups[1].Value.Trim())
+            .FirstOrDefault(extracted => !string.IsNullOrEmpty(extracted));
+
+        if (matchResult != null)
+        {
+            return FormatAsProjectName(matchResult);
         }
 
         // Fallback: Extract key nouns from the request (first 3 significant words)
@@ -410,7 +372,7 @@ IMPORTANT: Each task must generate no more than {maxLinesPerTask} lines of code.
             return "GeneratedProject";
         }
 
-        return result.Length > 50 ? result.Substring(0, 50) : result;
+        return result.Substring(0, Math.Min(50, result.Length));
     }
 
     /// <summary>

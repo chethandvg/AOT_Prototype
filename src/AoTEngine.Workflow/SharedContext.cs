@@ -108,14 +108,12 @@ public class SharedContext
         {
             contextBuilder.AppendLine();
             contextBuilder.AppendLine("=== Code from Dependencies ===");
-            foreach (var depId in dependencies)
+            foreach (var depId in dependencies.Where(id => IntermediateResults.ContainsKey(id)))
             {
-                if (IntermediateResults.TryGetValue(depId, out var result))
-                {
-                    contextBuilder.AppendLine($"// From task: {depId}");
-                    contextBuilder.AppendLine(result.GeneratedCode);
-                    contextBuilder.AppendLine();
-                }
+                var result = IntermediateResults[depId];
+                contextBuilder.AppendLine($"// From task: {depId}");
+                contextBuilder.AppendLine(result.GeneratedCode);
+                contextBuilder.AppendLine();
             }
         }
 
