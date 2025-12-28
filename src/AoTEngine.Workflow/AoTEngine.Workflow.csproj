@@ -1,0 +1,36 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- Project-specific settings (OutputType overrides Directory.Build.props) -->
+    <OutputType>Exe</OutputType>
+    <RootNamespace>AoTEngine.Workflow</RootNamespace>
+    <AssemblyName>AoTEngine.Workflow</AssemblyName>
+    <Description>AoT Engine Workflow - Coordinating Atomic Code Generation Tasks</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Microsoft.Extensions - Configuration -->
+    <PackageReference Include="Microsoft.Extensions.Configuration" Version="9.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="9.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.EnvironmentVariables" Version="9.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Project References to all modules -->
+    <ProjectReference Include="..\AoTEngine.Models\AoTEngine.Models.csproj" />
+    <ProjectReference Include="..\AoTEngine.Services.AI\AoTEngine.Services.AI.csproj" />
+    <ProjectReference Include="..\AoTEngine.Services.Compilation\AoTEngine.Services.Compilation.csproj" />
+    <ProjectReference Include="..\AoTEngine.Services.Contracts\AoTEngine.Services.Contracts.csproj" />
+    <ProjectReference Include="..\AoTEngine.Services.Documentation\AoTEngine.Services.Documentation.csproj" />
+    <ProjectReference Include="..\AoTEngine.Services.Integration\AoTEngine.Services.Integration.csproj" />
+    <ProjectReference Include="..\AoTEngine.Services.Validation\AoTEngine.Services.Validation.csproj" />
+    <ProjectReference Include="..\AoTEngine.Core\AoTEngine.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="appsettings.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
+</Project>

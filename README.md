@@ -13,6 +13,7 @@ The AoT Engine is a sophisticated C# application that leverages OpenAI's GPT mod
 - **[ARCHITECTURE.md](ARCHITECTURE.md)** - Detailed system architecture and technical design
 - **[USAGE.md](USAGE.md)** - Comprehensive usage examples and scenarios
 - **[CHANGELOG.md](CHANGELOG.md)** - Complete feature reference and version history
+- **[src/AoTEngine.Workflow/README.md](src/AoTEngine.Workflow/README.md)** - Coordinated atomic code generation workflow documentation
 
 ## Features
 
@@ -91,7 +92,7 @@ The AoT Engine is a sophisticated C# application that leverages OpenAI's GPT mod
 
 ## Architecture
 
-> **🎯 Modular Design**: The AoT Engine has been refactored into **9 separate class library projects** for maximum reusability and flexibility. See **[MODULAR_ARCHITECTURE.md](MODULAR_ARCHITECTURE.md)** for details on creating custom workflows.
+> **🎯 Modular Design**: The AoT Engine has been refactored into **9 separate class library projects**, plus the `AoTEngine.Workflow` executable and the main AoTEngine CLI, for maximum reusability and flexibility. See **[MODULAR_ARCHITECTURE.md](MODULAR_ARCHITECTURE.md)** for details on creating custom workflows.
 
 **Module Overview**:
 ```
@@ -104,6 +105,7 @@ src/
 ├── AoTEngine.Services.Integration/      # Code merging and integration
 ├── AoTEngine.Services.Validation/       # Code validation
 ├── AoTEngine.Core/                      # Core orchestration engine
+├── AoTEngine.Workflow/                  # Coordinated atomic code generation workflow (NEW)
 └── AoTEngine/                           # Main executable (CLI)
 ```
 
@@ -116,6 +118,7 @@ src/
 - **Services.Integration**: Code merging, auto-fix, complexity analysis
 - **Services.Validation**: Code validation using Roslyn
 - **Core**: Parallel execution engine, workflow orchestration
+- **Workflow**: Coordinated atomic code generation with planning, blackboard pattern, and iterative verification
 
 ## Prerequisites
 
