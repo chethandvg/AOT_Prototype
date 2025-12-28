@@ -8,6 +8,8 @@ The AoT Engine is a sophisticated C# application that leverages OpenAI's GPT mod
 ## 📚 Documentation
 
 - **[README.md](README.md)** - This file: Project overview and quick start guide
+- **[QUICK_START_MODULES.md](QUICK_START_MODULES.md)** - Quick start guide for using individual modules
+- **[MODULAR_ARCHITECTURE.md](MODULAR_ARCHITECTURE.md)** - Modular architecture guide and custom workflow examples
 - **[ARCHITECTURE.md](ARCHITECTURE.md)** - Detailed system architecture and technical design
 - **[USAGE.md](USAGE.md)** - Comprehensive usage examples and scenarios
 - **[CHANGELOG.md](CHANGELOG.md)** - Complete feature reference and version history
@@ -89,49 +91,31 @@ The AoT Engine is a sophisticated C# application that leverages OpenAI's GPT mod
 
 ## Architecture
 
+> **🎯 Modular Design**: The AoT Engine has been refactored into **9 separate class library projects** for maximum reusability and flexibility. See **[MODULAR_ARCHITECTURE.md](MODULAR_ARCHITECTURE.md)** for details on creating custom workflows.
+
+**Module Overview**:
 ```
-AoTEngine/
-├── Models/                              # Data models and contracts
-│   ├── TaskNode.cs                      # Represents atomic task in DAG
-│   ├── TaskSummaryRecord.cs             # Structured task documentation
-│   ├── ProjectDocumentation.cs          # Project-level documentation
-│   ├── CheckpointData.cs                # Checkpoint snapshot structure
-│   ├── ComplexityMetrics.cs             # Task complexity analysis metrics
-│   ├── TaskDecompositionStrategy.cs     # Decomposition strategies
-│   ├── TypeRegistry.cs                  # Type tracking & conflict detection
-│   ├── SymbolTable.cs                   # Project-wide symbol information
-│   ├── ContractCatalog.cs               # Frozen contract definitions
-│   └── ValidationResult.cs
-├── Services/                            # Service layer (organized by concern)
-│   ├── AI/                              # OpenAI API integration
-│   │   ├── OpenAIService*.cs            # OpenAI service (partial classes)
-│   │   ├── PromptContextBuilder.cs      # Enhanced prompt context
-│   │   └── KnownPackageVersions.cs      # Package version registry
-│   ├── Compilation/                     # Project building & Roslyn
-│   │   ├── ProjectBuildService*.cs      # Project build service
-│   │   ├── AtomCompilationService.cs    # Per-atom Roslyn compile
-│   │   └── AssemblyReferenceManager.cs  # Assembly resolution
-│   ├── Contracts/                       # Contract-first generation
-│   │   ├── ContractGenerationService.cs # Contract generation
-│   │   └── ContractManifestService.cs   # Contract save/load
-│   ├── Documentation/                   # Documentation & checkpoints
-│   │   ├── DocumentationService*.cs     # Documentation generation
-│   │   └── CheckpointService.cs         # Checkpoint management
-│   ├── Integration/                     # Code merging & fixing
-│   │   ├── CodeMergerService*.cs        # Code merging
-│   │   ├── IntegrationFixer.cs          # Roslyn-based auto-fix
-│   │   ├── AutoFixService.cs            # Auto-fix loop service
-│   │   ├── TaskComplexityAnalyzer*.cs   # Complexity analysis
-│   │   ├── AutoDecomposer*.cs           # Automatic decomposition
-│   │   └── UserInteractionService*.cs   # User interaction
-│   └── Validation/                      # Code validation
-│       └── CodeValidatorService*.cs     # Roslyn compilation & validation
-├── Core/                                # Engine orchestration
-│   ├── ParallelExecutionEngine*.cs      # Parallel task execution
-│   ├── AoTEngineOrchestrator.cs         # Main workflow orchestrator
-│   └── AoTResult.cs                     # Execution result model
-└── Program.cs                           # Entry point
+src/
+├── AoTEngine.Models/                    # Core data models and contracts
+├── AoTEngine.Services.AI/               # OpenAI integration services
+├── AoTEngine.Services.Compilation/      # Roslyn compilation services
+├── AoTEngine.Services.Contracts/        # Contract-first generation
+├── AoTEngine.Services.Documentation/    # Documentation generation
+├── AoTEngine.Services.Integration/      # Code merging and integration
+├── AoTEngine.Services.Validation/       # Code validation
+├── AoTEngine.Core/                      # Core orchestration engine
+└── AoTEngine/                           # Main executable (CLI)
 ```
+
+**Key Components**:
+- **Models**: TaskNode, ContractCatalog, SymbolTable, TypeRegistry, ValidationResult
+- **Services.AI**: OpenAI integration, code generation, task decomposition
+- **Services.Compilation**: Roslyn compilation, project building, assembly management
+- **Services.Contracts**: Contract-first generation, frozen interfaces/enums
+- **Services.Documentation**: Documentation export (Markdown, JSON, JSONL)
+- **Services.Integration**: Code merging, auto-fix, complexity analysis
+- **Services.Validation**: Code validation using Roslyn
+- **Core**: Parallel execution engine, workflow orchestration
 
 ## Prerequisites
 
@@ -395,45 +379,59 @@ Each line in `training_data.jsonl` contains:
 ```
 AOT_Prototype/
 ├── src/
-│   └── AoTEngine/                    # Main application
-│       ├── Core/                     # Engine orchestration
-│       │   ├── AoTEngineOrchestrator.cs
-│       │   ├── AoTResult.cs
-│       │   └── ParallelExecutionEngine*.cs
-│       ├── Models/                   # Data models and contracts
-│       │   ├── TaskNode.cs
-│       │   ├── ContractCatalog.cs
-│       │   ├── SymbolTable.cs
-│       │   └── ...
-│       ├── Services/                 # Service layer (organized by concern)
-│       │   ├── AI/                   # OpenAI integration
-│       │   ├── Compilation/          # Project building, Roslyn
-│       │   ├── Contracts/            # Contract-first generation
-│       │   ├── Documentation/        # Docs export, checkpoints
-│       │   ├── Integration/          # Code merging, auto-fix
-│       │   └── Validation/           # Code validation
+│   ├── AoTEngine.Models/                 # Core data models and contracts
+│   │   ├── TaskNode.cs
+│   │   ├── ContractCatalog.cs
+│   │   ├── SymbolTable.cs
+│   │   └── ...
+│   ├── AoTEngine.Services.AI/            # OpenAI integration
+│   │   ├── OpenAIService*.cs
+│   │   └── PromptContextBuilder.cs
+│   ├── AoTEngine.Services.Compilation/   # Roslyn compilation
+│   │   ├── ProjectBuildService*.cs
+│   │   └── AtomCompilationService.cs
+│   ├── AoTEngine.Services.Contracts/     # Contract-first generation
+│   │   ├── ContractGenerationService.cs
+│   │   └── ContractManifestService.cs
+│   ├── AoTEngine.Services.Documentation/ # Documentation export
+│   │   ├── DocumentationService*.cs
+│   │   └── CheckpointService.cs
+│   ├── AoTEngine.Services.Integration/   # Code merging
+│   │   ├── CodeMergerService*.cs
+│   │   └── IntegrationFixer.cs
+│   ├── AoTEngine.Services.Validation/    # Code validation
+│   │   └── CodeValidatorService*.cs
+│   ├── AoTEngine.Core/                   # Orchestration
+│   │   ├── AoTEngineOrchestrator.cs
+│   │   └── ParallelExecutionEngine*.cs
+│   └── AoTEngine/                        # Main executable
 │       ├── Program.cs
 │       └── appsettings.json
 ├── tests/
-│   └── AoTEngine.Tests/              # Unit tests
-├── docs/
-│   ├── ARCHITECTURE.md               # System architecture
-│   ├── USAGE.md                      # Usage examples
-│   └── CHANGELOG.md                  # Version history
-├── Directory.Build.props             # Common project settings
-└── AoTEngine.sln                     # Solution file
+│   └── AoTEngine.Tests/                  # Unit tests
+├── ARCHITECTURE.md                       # System architecture
+├── MODULAR_ARCHITECTURE.md               # Modular design guide
+├── USAGE.md                              # Usage examples
+├── CHANGELOG.md                          # Version history
+├── Directory.Build.props                 # Common project settings
+└── AoTEngine.sln                         # Solution file
 ```
 
-### Services Organization
+### Module Organization
 
-| Folder | Purpose |
-|--------|---------|
-| `Services/AI/` | OpenAI API integration, prompts, code generation |
-| `Services/Compilation/` | .NET project creation, Roslyn compilation |
-| `Services/Contracts/` | Contract-first generation and manifest |
-| `Services/Documentation/` | Documentation export, checkpoints |
-| `Services/Integration/` | Code merging, conflict resolution |
-| `Services/Validation/` | Code validation using Roslyn |
+| Module | Purpose | Key Dependencies |
+|--------|---------|------------------|
+| `AoTEngine.Models` | Core data models and contracts | Roslyn |
+| `AoTEngine.Services.AI` | OpenAI API integration, code generation | Models, OpenAI SDK |
+| `AoTEngine.Services.Compilation` | Roslyn compilation, project building | Models, AI, Roslyn |
+| `AoTEngine.Services.Contracts` | Contract-first generation | Models, OpenAI SDK |
+| `AoTEngine.Services.Documentation` | Documentation export, checkpoints | Models, AI |
+| `AoTEngine.Services.Integration` | Code merging, conflict resolution | Models, AI, Validation |
+| `AoTEngine.Services.Validation` | Code validation using Roslyn | Models, Compilation |
+| `AoTEngine.Core` | Orchestration engine | All Services |
+| `AoTEngine` | Main executable (CLI) | Core + All Services |
+
+> See **[MODULAR_ARCHITECTURE.md](MODULAR_ARCHITECTURE.md)** for detailed module documentation and custom workflow examples.
 
 ## Example Output
 
