@@ -344,30 +344,91 @@ IMPORTANT: Each task must generate no more than {maxLinesPerTask} lines of code.
     }
 
     /// <summary>
-    /// Extracts a project title from the user request.
+    /// Extracts a project title from the user request using pattern matching.
+    /// Falls back to a sanitized version of key nouns from the request.
     /// </summary>
     private string ExtractProjectTitle(string request)
     {
-        // Simple extraction - find keywords that suggest a project name
-        var patterns = new[]
+        // Patterns to match common project description phrases
+        var regexPatterns = new[]
         {
-            "create a",
-            "build a",
-            "implement a",
-            "develop a"
+            @"(?:create|build|implement|develop|make|design)\s+(?:a|an|the)\s+(.+?)(?:\s+(?:that|which|with|using|in|for)|[,.]|$)",
+            @"(?:project|application|app|system|service|api)\s+(?:called|named|for)\s+[""']?(\w+)[""']?",
+            @"(\w+)(?:Project|App|System|Service|Application|Api)"
         };
 
-        foreach (var pattern in patterns)
+        foreach (var pattern in regexPatterns)
         {
-            var index = request.IndexOf(pattern, StringComparison.OrdinalIgnoreCase);
-            if (index >= 0)
+            var match = System.Text.RegularExpressions.Regex.Match(
+                request, 
+                pattern, 
+                System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+            
+            if (match.Success && match.Groups.Count > 1)
             {
-                var afterPattern = request.Substring(index + pattern.Length).Trim();
-                var words = afterPattern.Split(' ').Take(3);
-                return string.Join(" ", words).Trim(',', '.', '!', '?');
+                var extracted = match.Groups[1].Value.Trim();
+                if (!string.IsNullOrEmpty(extracted))
+                {
+                    // Clean up and format as Pascal case
+                    return FormatAsProjectName(extracted);
+                }
             }
         }
 
-        return "Generated Project";
+        // Fallback: Extract key nouns from the request (first 3 significant words)
+        var words = request
+            .Split(new[] { ' ', ',', '.', '!', '?' }, StringSplitOptions.RemoveEmptyEntries)
+            .Where(w => w.Length > 2)
+            .Where(w => !IsStopWord(w))
+            .Take(3)
+            .ToList();
+
+        if (words.Any())
+        {
+            return FormatAsProjectName(string.Join("", words));
+        }
+
+        return "GeneratedProject";
+    }
+
+    /// <summary>
+    /// Formats a string as a Pascal case project name.
+    /// </summary>
+    private string FormatAsProjectName(string input)
+    {
+        // Remove non-alphanumeric characters and split into words
+        var cleaned = System.Text.RegularExpressions.Regex.Replace(input, @"[^a-zA-Z0-9\s]", " ");
+        var words = cleaned.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+
+        // Format as Pascal case
+        var result = string.Join("", words.Select(w => 
+            char.ToUpperInvariant(w[0]) + (w.Length > 1 ? w.Substring(1).ToLowerInvariant() : "")));
+
+        // Ensure it's a valid identifier (starts with letter)
+        if (string.IsNullOrEmpty(result) || !char.IsLetter(result[0]))
+        {
+            return "GeneratedProject";
+        }
+
+        return result.Length > 50 ? result.Substring(0, 50) : result;
+    }
+
+    /// <summary>
+    /// Checks if a word is a common stop word that should be excluded from project names.
+    /// </summary>
+    private bool IsStopWord(string word)
+    {
+        var stopWords = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "a", "an", "the", "and", "or", "but", "is", "are", "was", "were",
+            "be", "been", "being", "have", "has", "had", "do", "does", "did",
+            "will", "would", "could", "should", "may", "might", "can", "must",
+            "this", "that", "these", "those", "it", "its", "with", "for", "from",
+            "to", "of", "in", "on", "at", "by", "as", "into", "through", "during",
+            "create", "build", "implement", "develop", "make", "design", "write",
+            "simple", "basic", "please", "using", "include", "including"
+        };
+
+        return stopWords.Contains(word);
     }
 }

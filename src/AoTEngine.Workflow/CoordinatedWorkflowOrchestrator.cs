@@ -431,72 +431,60 @@ public class CoordinatedWorkflowOrchestrator
 
     /// <summary>
     /// Extracts type definitions from generated code and registers them in context.
+    /// Uses regular expressions for more robust parsing.
     /// </summary>
     private void ExtractAndRegisterTypes(TaskNode task, SharedContext context)
     {
-        // Simple extraction - in production, use Roslyn for accurate parsing
-        var lines = task.GeneratedCode.Split('\n');
+        var code = task.GeneratedCode;
         var currentNamespace = task.Namespace;
 
-        foreach (var line in lines)
+        // Extract namespace
+        var namespaceMatch = System.Text.RegularExpressions.Regex.Match(
+            code, 
+            @"namespace\s+([\w.]+)",
+            System.Text.RegularExpressions.RegexOptions.Multiline);
+        
+        if (namespaceMatch.Success)
         {
-            var trimmed = line.Trim();
+            currentNamespace = namespaceMatch.Groups[1].Value;
+        }
 
-            if (trimmed.StartsWith("namespace "))
+        // Patterns for type declarations
+        var typePatterns = new (string Pattern, string Kind)[]
+        {
+            (@"(?:public|internal|private|protected)?\s*(?:static|sealed|abstract|partial)?\s*interface\s+(\w+)", "Interface"),
+            (@"(?:public|internal|private|protected)?\s*(?:static|sealed|abstract|partial)?\s*class\s+(\w+)", "Class"),
+            (@"(?:public|internal|private|protected)?\s*(?:static|sealed|abstract|partial)?\s*struct\s+(\w+)", "Struct"),
+            (@"(?:public|internal|private|protected)?\s*enum\s+(\w+)", "Enum"),
+            (@"(?:public|internal|private|protected)?\s*record\s+(?:struct\s+)?(\w+)", "Record")
+        };
+
+        foreach (var (pattern, kind) in typePatterns)
+        {
+            var matches = System.Text.RegularExpressions.Regex.Matches(
+                code, 
+                pattern,
+                System.Text.RegularExpressions.RegexOptions.Multiline);
+
+            foreach (System.Text.RegularExpressions.Match match in matches)
             {
-                currentNamespace = trimmed.Replace("namespace ", "").Trim().TrimEnd(';', '{');
-            }
-            else if (trimmed.Contains("interface ") || trimmed.Contains("class ") ||
-                     trimmed.Contains("enum ") || trimmed.Contains("struct "))
-            {
-                var kind = "Unknown";
-                var name = "";
-
-                if (trimmed.Contains("interface "))
+                if (match.Success && match.Groups.Count > 1)
                 {
-                    kind = "Interface";
-                    name = ExtractTypeName(trimmed, "interface");
-                }
-                else if (trimmed.Contains("class "))
-                {
-                    kind = "Class";
-                    name = ExtractTypeName(trimmed, "class");
-                }
-                else if (trimmed.Contains("enum "))
-                {
-                    kind = "Enum";
-                    name = ExtractTypeName(trimmed, "enum");
-                }
-                else if (trimmed.Contains("struct "))
-                {
-                    kind = "Struct";
-                    name = ExtractTypeName(trimmed, "struct");
-                }
-
-                if (!string.IsNullOrEmpty(name))
-                {
-                    context.RegisterType(new TypeDefinition
+                    var name = match.Groups[1].Value;
+                    if (!string.IsNullOrEmpty(name))
                     {
-                        Name = name,
-                        Namespace = currentNamespace,
-                        FullyQualifiedName = $"{currentNamespace}.{name}",
-                        Kind = kind,
-                        DefinedByTaskId = task.Id
-                    });
+                        context.RegisterType(new TypeDefinition
+                        {
+                            Name = name,
+                            Namespace = currentNamespace,
+                            FullyQualifiedName = $"{currentNamespace}.{name}",
+                            Kind = kind,
+                            DefinedByTaskId = task.Id
+                        });
+                    }
                 }
             }
         }
-    }
-
-    private string ExtractTypeName(string line, string keyword)
-    {
-        var keywordIndex = line.IndexOf(keyword);
-        if (keywordIndex < 0) return "";
-
-        var afterKeyword = line.Substring(keywordIndex + keyword.Length).Trim();
-        var endIndex = afterKeyword.IndexOfAny(new[] { ' ', ':', '<', '{', '(' });
-
-        return endIndex > 0 ? afterKeyword.Substring(0, endIndex) : afterKeyword.TrimEnd('{', ':');
     }
 
     /// <summary>
