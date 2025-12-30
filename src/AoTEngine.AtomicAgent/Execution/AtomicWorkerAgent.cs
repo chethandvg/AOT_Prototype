@@ -195,7 +195,7 @@ Output ONLY the corrected C# code wrapped in ```csharp ... ``` markers.";
     private string ExtractCodeFromMarkdown(string response)
     {
         // Match ```csharp ... ``` or ``` ... ```
-        var pattern = @"```(?:csharp)?\s*(.*?)\s*```";
+        const string pattern = @"```(?:csharp)?\s*(.*?)\s*```";
         var match = Regex.Match(response, pattern, RegexOptions.Singleline);
 
         if (match.Success)

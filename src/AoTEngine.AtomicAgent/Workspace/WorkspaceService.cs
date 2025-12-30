@@ -47,7 +47,7 @@ public class WorkspaceService
 
         if (_enableSandboxing && !IsPathSafe(fullPath))
         {
-            throw new SecurityException($"Path '{relativePath}' is outside the workspace boundary: {_rootPath}");
+            throw new WorkspaceSecurityException($"Path '{relativePath}' is outside the workspace boundary: {_rootPath}");
         }
 
         return fullPath;
@@ -203,7 +203,7 @@ public class WorkspaceService
     }
 }
 
-public class SecurityException : Exception
+public class WorkspaceSecurityException : Exception
 {
-    public SecurityException(string message) : base(message) { }
+    public WorkspaceSecurityException(string message) : base(message) { }
 }

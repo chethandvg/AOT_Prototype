@@ -120,8 +120,6 @@ public class RoslynFeedbackLoop
             typeof(object).Assembly,                    // System.Private.CoreLib
             typeof(Console).Assembly,                   // System.Console
             typeof(System.Linq.Enumerable).Assembly,   // System.Linq
-            Assembly.Load("System.Runtime"),
-            Assembly.Load("netstandard")
         };
 
         foreach (var assembly in assemblies)
@@ -134,6 +132,27 @@ public class RoslynFeedbackLoop
             {
                 _logger.LogWarning(ex, "Failed to load reference: {Assembly}", assembly.FullName);
             }
+        }
+
+        // Try to load additional references
+        try
+        {
+            var runtimeAssembly = Assembly.Load("System.Runtime");
+            references.Add(MetadataReference.CreateFromFile(runtimeAssembly.Location));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "System.Runtime assembly not loaded");
+        }
+
+        try
+        {
+            var netstandardAssembly = Assembly.Load("netstandard");
+            references.Add(MetadataReference.CreateFromFile(netstandardAssembly.Location));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "netstandard assembly not loaded");
         }
 
         return references;

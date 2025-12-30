@@ -66,7 +66,7 @@ public class AtomicAgentOrchestrator
             foreach (var atom in atoms)
             {
                 // Set file path based on layer and type
-                atom.FilePath = $"src/{atom.Layer}/{atom.Type}s/{atom.Name}.cs";
+                atom.FilePath = Path.Combine("src", atom.Layer, $"{atom.Type}s", $"{atom.Name}.cs");
                 _blackboard.UpsertAtom(atom);
             }
 
