@@ -65,8 +65,18 @@ public class AtomicAgentOrchestrator
             // Store atoms in blackboard
             foreach (var atom in atoms)
             {
-                // Set file path based on layer and type
-                atom.FilePath = Path.Combine("src", atom.Layer, $"{atom.Type}s", $"{atom.Name}.cs");
+                // Set file path based on layer and type, using normalized casing and workspace-safe path
+                var relativePath = Path.Combine("src", atom.Layer, $"{atom.Type.ToLowerInvariant()}s", $"{atom.Name}.cs");
+                atom.FilePath = _workspace.GetSafePath(relativePath);
+                
+                // Validate architectural constraints
+                if (!_blackboard.ValidateLayerDependencies(atom))
+                {
+                    result.Success = false;
+                    result.ErrorMessage = $"Architectural validation failed for atom {atom.Id}. See logs for details.";
+                    return result;
+                }
+                
                 _blackboard.UpsertAtom(atom);
             }
 

@@ -46,7 +46,7 @@ public class ClarificationService
 
         if (ambiguityLevel == AmbiguityLevel.High)
         {
-            return await RequestClarificationAsync(userRequest);
+            return RequestClarification(userRequest);
         }
 
         return userRequest;
@@ -85,7 +85,7 @@ public class ClarificationService
     /// <summary>
     /// Prompts the user for clarification.
     /// </summary>
-    private async Task<string> RequestClarificationAsync(string originalRequest)
+    private string RequestClarification(string originalRequest)
     {
         Console.WriteLine();
         Console.WriteLine("⚠️  UNCERTAINTY DETECTED - Clarification Required");

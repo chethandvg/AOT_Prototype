@@ -113,8 +113,13 @@ public class WorkspaceService
     {
         try
         {
-            var solutionPath = GetSafePath($"{solutionName}.sln");
-            
+            // Validate solution name to prevent command injection
+            if (!IsValidProjectName(solutionName))
+            {
+                _logger.LogError("Invalid solution name: {SolutionName}. Must contain only alphanumeric characters, underscores, hyphens, and periods.", solutionName);
+                return false;
+            }
+
             var processStartInfo = new System.Diagnostics.ProcessStartInfo
             {
                 FileName = "dotnet",
@@ -133,7 +138,6 @@ public class WorkspaceService
             }
 
             await process.WaitForExitAsync();
-            var output = await process.StandardOutput.ReadToEndAsync();
             var error = await process.StandardError.ReadToEndAsync();
 
             if (process.ExitCode == 0)
@@ -161,6 +165,13 @@ public class WorkspaceService
     {
         try
         {
+            // Validate project name to prevent command injection
+            if (!IsValidProjectName(projectName))
+            {
+                _logger.LogError("Invalid project name: {ProjectName}. Must contain only alphanumeric characters, underscores, hyphens, and periods.", projectName);
+                return false;
+            }
+
             var projectDir = GetSafePath(relativePath);
             Directory.CreateDirectory(projectDir);
 
@@ -200,6 +211,19 @@ public class WorkspaceService
             _logger.LogError(ex, "Exception while creating class library");
             return false;
         }
+    }
+
+    /// <summary>
+    /// Validates that a project or solution name contains only safe characters.
+    /// Prevents command injection by restricting to alphanumeric, underscores, hyphens, and periods.
+    /// </summary>
+    private bool IsValidProjectName(string name)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+            return false;
+
+        // Allow only alphanumeric characters, underscores, hyphens, and periods
+        return System.Text.RegularExpressions.Regex.IsMatch(name, @"^[a-zA-Z0-9_\-\.]+$");
     }
 }
 

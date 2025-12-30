@@ -71,7 +71,7 @@ public class RoslynFeedbackLoop
 
             // Capture diagnostics
             var diagnostics = emitResult.Diagnostics
-                .Where(d => d.Severity >= DiagnosticSeverity.Warning || !_suppressWarnings)
+                .Where(d => d.Severity == DiagnosticSeverity.Error || !_suppressWarnings)
                 .ToList();
 
             result.Errors = diagnostics

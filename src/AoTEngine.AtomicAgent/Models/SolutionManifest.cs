@@ -17,8 +17,15 @@ public class ProjectMetadata
     public string Name { get; set; } = "AtomicAgentPrototype";
     public string RootNamespace { get; set; } = "AtomicAgent";
     public string TargetFramework { get; set; } = "net9.0";
-    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
-    public DateTime LastUpdated { get; set; } = DateTime.UtcNow;
+    public DateTime CreatedAt { get; set; }
+    public DateTime LastUpdated { get; set; }
+
+    public ProjectMetadata()
+    {
+        var now = DateTime.UtcNow;
+        CreatedAt = now;
+        LastUpdated = now;
+    }
 }
 
 public class ProjectHierarchy

@@ -238,26 +238,16 @@ Description: File-based implementation of IUserRepository";
 
     /// <summary>
     /// Asks the LLM to refactor the plan to break circular dependencies.
+    /// Currently implements a simple heuristic by removing the last dependency.
+    /// TODO: Implement actual LLM-based refactoring.
     /// </summary>
     private async Task<List<Atom>> RefactorToBreakCycleAsync(List<Atom> atoms, string errorMessage)
     {
         _logger.LogInformation("Requesting LLM to refactor and break circular dependency");
 
-        var refactorPrompt = $@"The following task decomposition has a circular dependency:
-
-{errorMessage}
-
-Current atoms:
-{string.Join("\n", atoms.Select(a => $"- {a.Id}: {a.Name} (depends on: {string.Join(", ", a.Dependencies)})"))}
-
-Please refactor by introducing an interface to break the cycle. 
-Follow the Dependency Inversion Principle.
-Return the updated atom list.";
-
-        // For simplicity, we'll just introduce an interface atom
+        // For now, just remove one dependency to break the cycle
         // In a real implementation, you'd call OpenAI to refactor
         
-        // For now, just remove one dependency to break the cycle
         var atomWithMostDeps = atoms.OrderByDescending(a => a.Dependencies.Count).First();
         if (atomWithMostDeps.Dependencies.Any())
         {

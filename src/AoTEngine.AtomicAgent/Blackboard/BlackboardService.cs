@@ -45,9 +45,18 @@ public class BlackboardService
         {
             lock (_lock)
             {
-                return _manifest;
+                return CloneManifest();
             }
         }
+    }
+
+    /// <summary>
+    /// Creates a deep copy of the manifest to prevent external mutation.
+    /// </summary>
+    private SolutionManifest CloneManifest()
+    {
+        var serialized = JsonConvert.SerializeObject(_manifest);
+        return JsonConvert.DeserializeObject<SolutionManifest>(serialized)!;
     }
 
     /// <summary>
@@ -249,6 +258,16 @@ public class BlackboardService
     {
         lock (_lock)
         {
+            // Core layer must have zero dependencies
+            if (atom.Layer == "Core" && atom.Dependencies.Any())
+            {
+                var deps = string.Join(", ", atom.Dependencies);
+                _logger.LogError(
+                    "Architectural violation: Core atom {AtomId} cannot have dependencies. Found: {Dependencies}",
+                    atom.Id, deps);
+                return false;
+            }
+
             if (!_manifest.ProjectHierarchy.Layers.TryGetValue(atom.Layer, out var layer))
             {
                 _logger.LogWarning("Unknown layer: {Layer}", atom.Layer);
