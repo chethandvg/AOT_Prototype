@@ -1,6 +1,34 @@
 # AoT Engine Usage Examples
 
-## Basic Usage
+This guide covers usage for both **AoTEngine** (original) and **AoTEngine.AtomicAgent** (new).
+
+## 🚀 Quick Start
+
+### Option 1: AoTEngine (Original - Task-Based Parallel)
+
+```bash
+cd src/AoTEngine
+export OPENAI_API_KEY="your-api-key"
+dotnet run
+```
+
+**Best for**: Parallel execution, contract-first generation, documentation synthesis
+
+### Option 2: AoTEngine.AtomicAgent (NEW - DAG-Based Autonomous)
+
+```bash
+cd src/AoTEngine.AtomicAgent
+export OPENAI_API_KEY="your-api-key"
+dotnet run
+```
+
+**Best for**: Clean architecture enforcement, dependency management, persistent state tracking
+
+**Quick Start Guide**: See [src/AoTEngine.AtomicAgent/GETTING_STARTED.md](src/AoTEngine.AtomicAgent/GETTING_STARTED.md)
+
+---
+
+## AoTEngine Usage Examples
 
 ### Example 1: Simple Calculator
 
@@ -836,3 +864,227 @@ var executionEngine = new ParallelExecutionEngine(
   - Shows final architecture
   - Includes only successful tasks
   - Useful for understanding the complete project
+
+---
+
+## AoTEngine.AtomicAgent Usage Examples
+
+### Overview
+
+The AtomicAgent uses a different paradigm from the original AoTEngine:
+- **DAG-based** instead of task-based
+- **Persistent state** via `solution_manifest.json`
+- **Abstractions first** with topological sort
+- **Per-atom validation** with Roslyn feedback loop
+
+### Example 1: User Management System
+
+**Request:**
+```
+Create a user management system with User DTO, IUserRepository interface, 
+and InMemoryUserRepository implementation
+```
+
+**Workflow:**
+
+1. **Clarification Phase**:
+   ```
+   ⚠️  UNCERTAINTY DETECTED
+   1. Storage type? → memory
+   2. Interface type? → console
+   3. Frameworks? → none
+   ```
+
+2. **Planning Phase** (Abstractions First):
+   ```
+   Generated 3 atoms:
+   - atom_001 (dto): UserDto [Core layer, no deps]
+   - atom_002 (interface): IUserRepository [Core layer, deps: atom_001]
+   - atom_003 (implementation): InMemoryUserRepository [Infrastructure layer, deps: atom_001, atom_002]
+   ```
+
+3. **Execution Phase**:
+   ```
+   → Executing atom_001: UserDto
+      ✓ Compiled successfully
+      ✓ Semantic extraction: Added UserDto to symbol table
+   
+   → Executing atom_002: IUserRepository
+      ✓ Compiled successfully
+      ✓ Semantic extraction: Added IUserRepository.GetById, Add, Update, Delete
+   
+   → Executing atom_003: InMemoryUserRepository
+      ✓ Compiled successfully (retry 0)
+   ```
+
+4. **Output**:
+   ```
+   ./output/
+   ├── src/
+   │   ├── Core/
+   │   │   ├── dtos/UserDto.cs
+   │   │   └── interfaces/IUserRepository.cs
+   │   └── Infrastructure/
+   │       └── implementations/InMemoryUserRepository.cs
+   └── solution_manifest.json
+   ```
+
+### Example 2: Multi-Layer Application with Validation
+
+**Request:**
+```
+Create an order processing system with Order and OrderItem DTOs,
+IOrderService interface, OrderService implementation,
+and OrderController for REST API
+```
+
+**Generated Atoms** (showing topological order):
+```
+1. atom_001 (dto): OrderItemDto [Core, no deps]
+2. atom_002 (dto): OrderDto [Core, deps: atom_001]
+3. atom_003 (interface): IOrderService [Core, deps: atom_001, atom_002]
+4. atom_004 (implementation): OrderService [Infrastructure, deps: atom_001, atom_002, atom_003]
+5. atom_005 (implementation): OrderController [Presentation, deps: atom_003]
+```
+
+**Architectural Validation**:
+- ✓ Core atoms have zero dependencies on Infrastructure/Presentation
+- ✓ Infrastructure depends only on Core
+- ✓ Presentation depends on Core (via IOrderService)
+- ✗ If OrderController tried to depend on OrderService directly → **REJECTED**
+
+### Example 3: Handling Compilation Errors
+
+**Scenario**: Generated code has a typo
+
+**Self-Correction Cycle**:
+```
+→ Executing atom_003: UserRepository
+   ✗ Compilation failed:
+      CS1061 at Line 15: 'User' does not contain a definition for 'Naem'
+   
+   → Retry 1: Feeding error to LLM
+      "Fix the following compilation error: ..."
+   
+   ✓ Recompiled successfully
+      Fixed: Naem → Name
+```
+
+### Example 4: Circular Dependency Detection
+
+**Request:**
+```
+Create ServiceA that depends on ServiceB,
+and ServiceB that depends on ServiceA
+```
+
+**Planner Response**:
+```
+⚠️  Circular dependency detected in atoms: 
+   atom_002 → atom_003 → atom_002
+
+→ Retry 1: Refactoring to break cycle
+   Introducing IServiceA interface
+   
+Generated 4 atoms:
+- atom_001 (interface): IServiceA
+- atom_002 (interface): IServiceB
+- atom_003 (implementation): ServiceA [deps: atom_001, atom_002]
+- atom_004 (implementation): ServiceB [deps: atom_001, atom_002]
+```
+
+### Configuration Examples
+
+#### Custom Output Directory
+```bash
+dotnet run
+# When prompted:
+📁 Enter output directory: /path/to/my/project
+```
+
+#### Disable Abstractions First (not recommended)
+```json
+// appsettings.json
+"Planner": {
+  "AbstractionsFirst": false
+}
+```
+
+#### Increase Retry Count
+```json
+"Execution": {
+  "MaxRetries": 5
+}
+```
+
+#### Disable Hot Cache (reduce memory usage)
+```json
+"Context": {
+  "EnableHotCache": false
+}
+```
+
+### Reading the Solution Manifest
+
+The `solution_manifest.json` provides a complete picture:
+
+```json
+{
+  "project_metadata": {
+    "name": "MyProject",
+    "created_at": "2024-01-01T10:00:00Z"
+  },
+  "semantic_symbol_table": {
+    "interfaces": [
+      {
+        "name": "IUserRepository",
+        "namespace": "MyProject.Core",
+        "methods": [
+          "User GetById(int id)",
+          "void Add(User user)"
+        ]
+      }
+    ]
+  },
+  "atoms": [
+    {
+      "id": "atom_001",
+      "status": "completed",
+      "retry_count": 0,
+      "compile_errors": []
+    }
+  ]
+}
+```
+
+### Comparison: AoTEngine vs AtomicAgent
+
+| Scenario | AoTEngine | AtomicAgent |
+|----------|-----------|-------------|
+| Simple CRUD | ✓ Fast parallel execution | ✓ Clean architecture enforced |
+| Complex dependencies | ⚠️ Manual ordering needed | ✓ Automatic topological sort |
+| Architectural rules | ⚠️ No enforcement | ✓ Validates Core has zero deps |
+| State tracking | In-memory only | ✓ Persistent JSON manifest |
+| Token efficiency | Full code in context | ✓ 70% reduction via signatures |
+| Self-correction | Batch validation | ✓ Per-atom with Roslyn feedback |
+
+### When to Use Which?
+
+**Use AoTEngine when:**
+- You need parallel execution for speed
+- You want contract-first generation
+- You need documentation synthesis (Markdown, JSON, JSONL)
+- You have a well-defined structure
+
+**Use AtomicAgent when:**
+- You need strict Clean Architecture enforcement
+- You have complex dependencies to manage
+- You want persistent state tracking
+- You need self-correcting compilation feedback
+- Token efficiency is critical
+
+### Additional Resources
+
+- **Getting Started**: [src/AoTEngine.AtomicAgent/GETTING_STARTED.md](src/AoTEngine.AtomicAgent/GETTING_STARTED.md)
+- **Implementation Details**: [ATOMIC_AGENT_IMPLEMENTATION_SUMMARY.md](ATOMIC_AGENT_IMPLEMENTATION_SUMMARY.md)
+- **Project README**: [src/AoTEngine.AtomicAgent/README.md](src/AoTEngine.AtomicAgent/README.md)

@@ -107,9 +107,72 @@ OPENAI_API_KEY=your-api-key-here
 
 ## Usage
 
-```bash
-cd src/AoTEngine.AtomicAgent
-dotnet run
+### Quick Start
+
+1. **Set up your API key**:
+   ```bash
+   cd src/AoTEngine.AtomicAgent
+   cp .env.example .env
+   # Edit .env and add your OpenAI API key
+   ```
+
+2. **Run the application**:
+   ```bash
+   dotnet run
+   ```
+
+3. **Enter your request** when prompted, or press Enter to use the demo request.
+
+### Example Session
+
+```
+╔════════════════════════════════════════════════════════════════╗
+║   Atomic Thought Framework - Autonomous C# Coding Agent       ║
+║   Implementing the 8-Component Architectural Blueprint         ║
+╚════════════════════════════════════════════════════════════════╝
+
+Enter your coding request:
+> Create a simple user management system with a User DTO, 
+  IUserRepository interface, and FileUserRepository implementation 
+  that stores users in a JSON file.
+
+📋 Phase 1: Analyzing request for ambiguities...
+⚠️  UNCERTAINTY DETECTED - Clarification Required
+Please clarify the following:
+1. What type of storage? (database/file/memory/none)
+   Storage: file
+2. What type of interface? (console/api/web/none)
+   Interface: console
+3. Any specific frameworks or libraries to use? (or 'none')
+   Frameworks: none
+
+🧠 Phase 2: Generating execution plan (Abstractions First)...
+   Generated 3 atoms:
+   - atom_001 (dto): UserDto [deps: None]
+   - atom_002 (interface): IUserRepository [deps: atom_001]
+   - atom_003 (implementation): FileUserRepository [deps: atom_001, atom_002]
+
+⚙️  Phase 3: Executing atoms in dependency order...
+
+   → Executing atom_001: UserDto (dto)...
+      ✓ Success (retry count: 0)
+
+   → Executing atom_002: IUserRepository (interface)...
+      ✓ Success (retry count: 0)
+
+   → Executing atom_003: FileUserRepository (implementation)...
+      ✓ Success (retry count: 0)
+
+📊 Phase 4: Execution Complete
+═══════════════════════════════════════════════════
+Total Atoms: 3
+Completed: 3
+Failed: 0
+Workspace: /path/to/output
+
+Solution manifest saved to: solution_manifest.json
+
+✅ All atoms completed successfully!
 ```
 
 ### Example Request
