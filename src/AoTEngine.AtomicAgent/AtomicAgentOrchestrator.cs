@@ -69,15 +69,26 @@ public class AtomicAgentOrchestrator
                 var relativePath = Path.Combine("src", atom.Layer, $"{atom.Type.ToLowerInvariant()}s", $"{atom.Name}.cs");
                 atom.FilePath = _workspace.GetSafePath(relativePath);
                 
-                // Validate architectural constraints
+                _blackboard.UpsertAtom(atom);
+            }
+
+            // Fix architectural violations before validation
+            var fixedCount = FixCoreLayerViolations(atoms);
+            if (fixedCount > 0)
+            {
+                _logger.LogWarning("Fixed {Count} Core layer architectural violations by reassigning layers", fixedCount);
+                Console.WriteLine($"   ⚠️  Fixed {fixedCount} Core layer atoms with dependencies by moving to Infrastructure layer");
+            }
+
+            // Validate architectural constraints after fixes
+            foreach (var atom in atoms)
+            {
                 if (!_blackboard.ValidateLayerDependencies(atom))
                 {
                     result.Success = false;
                     result.ErrorMessage = $"Architectural validation failed for atom {atom.Id}. See logs for details.";
                     return result;
                 }
-                
-                _blackboard.UpsertAtom(atom);
             }
 
             Console.WriteLine($"   Generated {atoms.Count} atoms:");
@@ -192,6 +203,46 @@ public class AtomicAgentOrchestrator
         }
 
         return result;
+    }
+
+    /// <summary>
+    /// Fixes Core layer architectural violations by moving atoms with dependencies to Infrastructure layer.
+    /// Core layer atoms should have zero dependencies according to Clean Architecture.
+    /// </summary>
+    private int FixCoreLayerViolations(List<Atom> atoms)
+    {
+        int fixedCount = 0;
+
+        foreach (var atom in atoms.Where(a => a.Layer == "Core" && a.Dependencies.Any()).ToList())
+        {
+            // Determine which dependencies are causing the issue
+            var dependencyAtoms = atoms.Where(a => atom.Dependencies.Contains(a.Id)).ToList();
+            
+            // Check if all dependencies are also Core layer (which would be valid if they had no deps)
+            bool allDepsAreCore = dependencyAtoms.All(d => d.Layer == "Core" && !d.Dependencies.Any());
+            
+            if (!allDepsAreCore)
+            {
+                // This atom has dependencies on non-Core or dependent Core atoms
+                // Move it to Infrastructure layer
+                _logger.LogWarning(
+                    "Moving atom {AtomId} ({Name}) from Core to Infrastructure due to dependencies: {Dependencies}",
+                    atom.Id, atom.Name, string.Join(", ", atom.Dependencies));
+                
+                atom.Layer = "Infrastructure";
+                
+                // Update file path for new layer
+                var relativePath = Path.Combine("src", atom.Layer, $"{atom.Type.ToLowerInvariant()}s", $"{atom.Name}.cs");
+                atom.FilePath = _workspace.GetSafePath(relativePath);
+                
+                // Update in blackboard
+                _blackboard.UpsertAtom(atom);
+                
+                fixedCount++;
+            }
+        }
+
+        return fixedCount;
     }
 }
 

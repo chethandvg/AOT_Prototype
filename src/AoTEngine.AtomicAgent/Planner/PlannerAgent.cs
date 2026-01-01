@@ -188,20 +188,37 @@ Description: File-based implementation of IUserRepository";
     {
         var lower = description.ToLowerInvariant();
         
-        if (lower.Contains("interface") || lower.Contains("dto") || lower.Contains("model"))
+        // DTOs and interfaces without dependencies always go to Core
+        if (lower.Contains("dto") || lower.Contains("model") || lower.Contains("entity"))
             return "Core";
         
-        if (lower.Contains("repository") || lower.Contains("service") || lower.Contains("database"))
+        if (lower.Contains("interface") && !lower.Contains("implement"))
+            return "Core";
+        
+        // Anything with "implement", "service", "repository", "database", "file" goes to Infrastructure
+        if (lower.Contains("implement") || lower.Contains("repository") || 
+            lower.Contains("service") || lower.Contains("database") || 
+            lower.Contains("file") || lower.Contains("storage") ||
+            lower.Contains("persistence") || lower.Contains("data access"))
             return "Infrastructure";
         
-        if (lower.Contains("controller") || lower.Contains("api") || lower.Contains("ui"))
+        // Controllers, API, UI go to Presentation
+        if (lower.Contains("controller") || lower.Contains("api") || 
+            lower.Contains("ui") || lower.Contains("view") ||
+            lower.Contains("endpoint") || lower.Contains("handler"))
             return "Presentation";
         
-        return "Core"; // Default to Core
+        // Default: if it looks like a contract (interface keyword), use Core
+        // Otherwise use Infrastructure for safety
+        if (lower.Contains("interface") || lower.Contains("abstract"))
+            return "Core";
+        
+        return "Infrastructure"; // Changed from Core to Infrastructure as safer default
     }
 
     /// <summary>
     /// Enforces abstractions-first ordering: DTOs, then Interfaces, then Implementations.
+    /// Also ensures Core layer atoms have no dependencies.
     /// </summary>
     private List<Atom> EnforceAbstractionsFirst(List<Atom> atoms)
     {
@@ -215,12 +232,39 @@ Description: File-based implementation of IUserRepository";
         {
             dto.Dependencies.RemoveAll(depId => 
                 atoms.Any(a => a.Id == depId && a.Type == AtomType.Implementation));
+            
+            // If DTO is in Core and still has dependencies, clear them
+            if (dto.Layer == "Core" && dto.Dependencies.Any())
+            {
+                _logger.LogWarning("Removing dependencies from Core DTO {AtomId}: {Dependencies}",
+                    dto.Id, string.Join(", ", dto.Dependencies));
+                dto.Dependencies.Clear();
+            }
         }
 
         foreach (var iface in interfaces)
         {
             iface.Dependencies.RemoveAll(depId => 
                 atoms.Any(a => a.Id == depId && a.Type == AtomType.Implementation));
+            
+            // Interfaces in Core can only depend on Core DTOs
+            if (iface.Layer == "Core")
+            {
+                var invalidDeps = iface.Dependencies
+                    .Where(depId => !atoms.Any(a => a.Id == depId && a.Type == AtomType.Dto && a.Layer == "Core"))
+                    .ToList();
+                
+                if (invalidDeps.Any())
+                {
+                    _logger.LogWarning("Removing invalid dependencies from Core interface {AtomId}: {Dependencies}",
+                        iface.Id, string.Join(", ", invalidDeps));
+                    
+                    foreach (var invalidDep in invalidDeps)
+                    {
+                        iface.Dependencies.Remove(invalidDep);
+                    }
+                }
+            }
         }
 
         var reordered = new List<Atom>();
