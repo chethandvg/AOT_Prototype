@@ -30,6 +30,35 @@ var configuration = new ConfigurationBuilder()
     .AddEnvironmentVariables()
     .Build();
 
+// Prompt user for output directory
+Console.WriteLine("╔════════════════════════════════════════════════════════════════╗");
+Console.WriteLine("║   Atomic Thought Framework - Autonomous C# Coding Agent       ║");
+Console.WriteLine("╚════════════════════════════════════════════════════════════════╝");
+Console.WriteLine();
+Console.WriteLine("Where would you like to store the generated solution?");
+Console.WriteLine($"(Press Enter for default: {Path.GetFullPath("./output")})");
+Console.Write("> ");
+var outputPath = Console.ReadLine()?.Trim();
+
+if (string.IsNullOrWhiteSpace(outputPath))
+{
+    outputPath = configuration.GetSection("Workspace")["RootPath"] ?? "./output";
+}
+
+// Validate and create the directory
+try
+{
+    var fullOutputPath = Path.GetFullPath(outputPath);
+    Console.WriteLine($"✓ Using output directory: {fullOutputPath}\n");
+    outputPath = fullOutputPath;
+}
+catch (Exception ex)
+{
+    Console.WriteLine($"❌ Invalid path: {ex.Message}");
+    Console.WriteLine($"   Using default: {Path.GetFullPath("./output")}\n");
+    outputPath = "./output";
+}
+
 // Configure services using .NET Generic Host
 var host = Host.CreateDefaultBuilder(args)
     .ConfigureServices((context, services) =>
@@ -59,9 +88,9 @@ var host = Host.CreateDefaultBuilder(args)
         // Register services
         services.AddMemoryCache();
         
-        // Workspace
+        // Workspace - use user-provided path
         services.AddSingleton(sp => new WorkspaceService(
-            workspaceConfig["RootPath"] ?? "./output",
+            outputPath,
             workspaceConfig.GetValue<bool>("EnableSandboxing", true),
             sp.GetRequiredService<ILogger<WorkspaceService>>()));
 
@@ -145,13 +174,8 @@ var host = Host.CreateDefaultBuilder(args)
     })
     .Build();
 
-// Display banner
+// Display components
 var compilationMode = configuration["Execution:CompilationMode"] ?? "Progressive";
-Console.WriteLine("╔════════════════════════════════════════════════════════════════╗");
-Console.WriteLine("║   Atomic Thought Framework - Autonomous C# Coding Agent       ║");
-Console.WriteLine("║   Implementing the 8-Component Architectural Blueprint         ║");
-Console.WriteLine("╚════════════════════════════════════════════════════════════════╝");
-Console.WriteLine();
 Console.WriteLine("Components:");
 Console.WriteLine("  1. ✓ Workspace Service (Sandboxed File System)");
 Console.WriteLine("  2. ✓ Blackboard Service (Shared Knowledge Base)");
