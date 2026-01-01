@@ -146,9 +146,19 @@ public class AtomicAgentOrchestrator
                     var projectCreated = await _workspace.CreateClassLibraryAsync(layerProjectName, layerPath);
                     if (projectCreated)
                     {
-                        // Add project to solution
-                        var projectFilePath = _workspace.GetSafePath($"{layerPath}/{layerProjectName}.csproj");
-                        await _workspace.AddProjectToSolutionAsync(solutionName, projectFilePath);
+                        // Add project to solution using relative path from workspace root
+                        var relativeProjectPath = $"{layerPath}/{layerProjectName}.csproj";
+                        var fullProjectPath = _workspace.GetSafePath(relativeProjectPath);
+                        var added = await _workspace.AddProjectToSolutionAsync(solutionName, fullProjectPath);
+                        
+                        if (added)
+                        {
+                            Console.WriteLine($"      ✓ Added {layerProjectName}.csproj to solution");
+                        }
+                        else
+                        {
+                            _logger.LogWarning("Failed to add project {ProjectName} to solution", layerProjectName);
+                        }
                     }
                     else
                     {

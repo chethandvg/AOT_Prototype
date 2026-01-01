@@ -197,6 +197,15 @@ public class WorkspaceService
             if (process.ExitCode == 0)
             {
                 _logger.LogInformation("Class library created: {ProjectName} at {Path}", projectName, projectDir);
+                
+                // Delete the default Class1.cs file created by dotnet new classlib
+                var defaultClassFile = Path.Combine(projectDir, "Class1.cs");
+                if (File.Exists(defaultClassFile))
+                {
+                    File.Delete(defaultClassFile);
+                    _logger.LogDebug("Deleted default Class1.cs file");
+                }
+                
                 return true;
             }
             else
@@ -227,11 +236,18 @@ public class WorkspaceService
                 _logger.LogError("Solution file not found: {SolutionPath}", solutionPath);
                 return false;
             }
+            
+            // Verify project file exists
+            if (!File.Exists(projectPath))
+            {
+                _logger.LogError("Project file not found: {ProjectPath}", projectPath);
+                return false;
+            }
 
             var processStartInfo = new System.Diagnostics.ProcessStartInfo
             {
                 FileName = "dotnet",
-                Arguments = $"sln \"{solutionPath}\" add \"{projectPath}\"",
+                Arguments = $"sln \"{solutionName}.sln\" add \"{projectPath}\"",
                 WorkingDirectory = _rootPath,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
@@ -246,16 +262,18 @@ public class WorkspaceService
             }
 
             await process.WaitForExitAsync();
+            var output = await process.StandardOutput.ReadToEndAsync();
+            var error = await process.StandardError.ReadToEndAsync();
 
             if (process.ExitCode == 0)
             {
                 _logger.LogInformation("Project added to solution: {ProjectPath}", projectPath);
+                _logger.LogDebug("dotnet sln add output: {Output}", output);
                 return true;
             }
             else
             {
-                var error = await process.StandardError.ReadToEndAsync();
-                _logger.LogError("Failed to add project to solution: {Error}", error);
+                _logger.LogError("Failed to add project to solution. Error: {Error}, Output: {Output}", error, output);
                 return false;
             }
         }
