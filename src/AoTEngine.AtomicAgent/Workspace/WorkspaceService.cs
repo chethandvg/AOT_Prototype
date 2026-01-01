@@ -178,7 +178,7 @@ public class WorkspaceService
             var processStartInfo = new System.Diagnostics.ProcessStartInfo
             {
                 FileName = "dotnet",
-                Arguments = $"new classlib -n {projectName} -f net9.0",
+                Arguments = $"new classlib -o . -n {projectName} -f net9.0",
                 WorkingDirectory = projectDir,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
