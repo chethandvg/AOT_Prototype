@@ -106,6 +106,13 @@ var host = Host.CreateDefaultBuilder(args)
             sp.GetRequiredService<ILogger<RoslynFeedbackLoop>>(),
             roslynConfig.GetValue<bool>("SuppressWarnings", true)));
 
+        // Project Compilation Service
+        services.AddSingleton(sp => new ProjectCompilationService(
+            sp.GetRequiredService<BlackboardService>(),
+            sp.GetRequiredService<WorkspaceService>(),
+            sp.GetRequiredService<ILogger<ProjectCompilationService>>(),
+            roslynConfig.GetValue<bool>("SuppressWarnings", true)));
+
         // Atomic Worker
         services.AddSingleton(sp => new AtomicWorkerAgent(
             sp.GetRequiredService<OpenAIService>(),
@@ -113,10 +120,22 @@ var host = Host.CreateDefaultBuilder(args)
             sp.GetRequiredService<RoslynFeedbackLoop>(),
             sp.GetRequiredService<BlackboardService>(),
             sp.GetRequiredService<ILogger<AtomicWorkerAgent>>(),
-            executionConfig.GetValue<int>("MaxRetries", 3)));
+            executionConfig.GetValue<int>("MaxRetries", 3),
+            executionConfig.GetValue<bool>("ValidateAtomically", true)));
 
         // Orchestrator
-        services.AddSingleton<AtomicAgentOrchestrator>();
+        services.AddSingleton(sp => new AtomicAgentOrchestrator(
+            sp.GetRequiredService<WorkspaceService>(),
+            sp.GetRequiredService<BlackboardService>(),
+            sp.GetRequiredService<PlannerAgent>(),
+            sp.GetRequiredService<ClarificationService>(),
+            sp.GetRequiredService<ContextEngine>(),
+            sp.GetRequiredService<AtomicWorkerAgent>(),
+            sp.GetRequiredService<ProjectCompilationService>(),
+            sp.GetRequiredService<ILogger<AtomicAgentOrchestrator>>(),
+            executionConfig["CompilationMode"] ?? "Progressive",
+            executionConfig.GetValue<bool>("ValidateAfterAllGenerated", true),
+            executionConfig.GetValue<int>("MaxProgressiveRounds", 3)));
     })
     .ConfigureLogging(logging =>
     {
@@ -127,6 +146,7 @@ var host = Host.CreateDefaultBuilder(args)
     .Build();
 
 // Display banner
+var compilationMode = configuration["Execution:CompilationMode"] ?? "Progressive";
 Console.WriteLine("╔════════════════════════════════════════════════════════════════╗");
 Console.WriteLine("║   Atomic Thought Framework - Autonomous C# Coding Agent       ║");
 Console.WriteLine("║   Implementing the 8-Component Architectural Blueprint         ║");
@@ -139,7 +159,7 @@ Console.WriteLine("  3. ✓ Planner Agent (Abstractions First + Topological Sort
 Console.WriteLine("  4. ✓ Clarification Loop (Ambiguity Detection)");
 Console.WriteLine("  5. ✓ Context Engine (Tiered Injection + Hot Cache)");
 Console.WriteLine("  6. ✓ Atomic Worker Agent (Code Generation)");
-Console.WriteLine("  7. ✓ Roslyn Feedback Loop (In-Memory Compilation)");
+Console.WriteLine($"  7. ✓ Compilation Mode: {compilationMode}");
 Console.WriteLine("  8. ⚠  Token Garbage Collection (Not yet implemented)");
 Console.WriteLine();
 

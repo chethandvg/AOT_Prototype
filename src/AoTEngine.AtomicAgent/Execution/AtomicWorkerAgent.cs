@@ -20,6 +20,7 @@ public class AtomicWorkerAgent
     private readonly BlackboardService _blackboard;
     private readonly ILogger<AtomicWorkerAgent> _logger;
     private readonly int _maxRetries;
+    private readonly bool _validateAtomically;
 
     public AtomicWorkerAgent(
         OpenAIService openAIService,
@@ -27,7 +28,8 @@ public class AtomicWorkerAgent
         RoslynFeedbackLoop roslynLoop,
         BlackboardService blackboard,
         ILogger<AtomicWorkerAgent> logger,
-        int maxRetries = 3)
+        int maxRetries = 3,
+        bool validateAtomically = true)
     {
         _openAIService = openAIService;
         _contextEngine = contextEngine;
@@ -35,10 +37,11 @@ public class AtomicWorkerAgent
         _blackboard = blackboard;
         _logger = logger;
         _maxRetries = maxRetries;
+        _validateAtomically = validateAtomically;
     }
 
     /// <summary>
-    /// Executes an atom: generates code, validates, and updates the blackboard.
+    /// Executes an atom: generates code, validates (if atomic mode), and updates the blackboard.
     /// </summary>
     public async Task<bool> ExecuteAtomAsync(Atom atom)
     {
@@ -75,10 +78,19 @@ public class AtomicWorkerAgent
                 atom.RetryCount = attempt;
                 _blackboard.UpsertAtom(atom);
 
+                // If not validating atomically, mark as completed after generation
+                if (!_validateAtomically)
+                {
+                    _logger.LogInformation("✓ Atom {AtomId} generated (validation deferred to project compilation)", atom.Id);
+                    _contextEngine.CacheCode(atom.Id, code);
+                    _blackboard.UpdateAtomStatus(atom.Id, AtomStatus.Completed);
+                    return true;
+                }
+
                 // Move to review status
                 _blackboard.UpdateAtomStatus(atom.Id, AtomStatus.Review);
 
-                // Validate with Roslyn
+                // Validate with Roslyn (atomic mode)
                 var compilationResult = _roslynLoop.CompileInMemory(atom);
 
                 if (compilationResult.Success)

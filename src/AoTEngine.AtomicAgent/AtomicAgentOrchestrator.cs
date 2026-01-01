@@ -4,6 +4,7 @@ using AoTEngine.AtomicAgent.Context;
 using AoTEngine.AtomicAgent.Execution;
 using AoTEngine.AtomicAgent.Models;
 using AoTEngine.AtomicAgent.Planner;
+using AoTEngine.AtomicAgent.Roslyn;
 using AoTEngine.AtomicAgent.Workspace;
 using Microsoft.Extensions.Logging;
 
@@ -21,7 +22,11 @@ public class AtomicAgentOrchestrator
     private readonly ClarificationService _clarification;
     private readonly ContextEngine _contextEngine;
     private readonly AtomicWorkerAgent _worker;
+    private readonly ProjectCompilationService _projectCompiler;
     private readonly ILogger<AtomicAgentOrchestrator> _logger;
+    private readonly string _compilationMode;
+    private readonly bool _validateAfterAllGenerated;
+    private readonly int _maxProgressiveRounds;
 
     public AtomicAgentOrchestrator(
         WorkspaceService workspace,
@@ -30,7 +35,11 @@ public class AtomicAgentOrchestrator
         ClarificationService clarification,
         ContextEngine contextEngine,
         AtomicWorkerAgent worker,
-        ILogger<AtomicAgentOrchestrator> logger)
+        ProjectCompilationService projectCompiler,
+        ILogger<AtomicAgentOrchestrator> logger,
+        string compilationMode = "Progressive",
+        bool validateAfterAllGenerated = true,
+        int maxProgressiveRounds = 3)
     {
         _workspace = workspace;
         _blackboard = blackboard;
@@ -38,7 +47,11 @@ public class AtomicAgentOrchestrator
         _clarification = clarification;
         _contextEngine = contextEngine;
         _worker = worker;
+        _projectCompiler = projectCompiler;
         _logger = logger;
+        _compilationMode = compilationMode;
+        _validateAfterAllGenerated = validateAfterAllGenerated;
+        _maxProgressiveRounds = maxProgressiveRounds;
     }
 
     /// <summary>
@@ -169,6 +182,25 @@ public class AtomicAgentOrchestrator
                 }
             }
 
+            // Phase 3.5: Progressive Compilation (if enabled)
+            if (_compilationMode == "Progressive" && _validateAfterAllGenerated)
+            {
+                Console.WriteLine("\n🔧 Phase 3.5: Progressive Compilation Mode");
+                Console.WriteLine("═══════════════════════════════════════════════════");
+                
+                var progressiveResult = await ExecuteProgressiveCompilationAsync(atoms);
+                
+                if (progressiveResult.Success)
+                {
+                    Console.WriteLine("\n✅ Progressive compilation succeeded - all atoms compile cleanly!");
+                }
+                else
+                {
+                    Console.WriteLine($"\n⚠️  Progressive compilation completed with {progressiveResult.AtomsWithErrors} atoms still having errors");
+                    result.FailedAtoms = progressiveResult.AtomsWithErrors;
+                }
+            }
+
             // Phase 4: Report Results
             Console.WriteLine("\n📊 Phase 4: Execution Complete");
             Console.WriteLine("═══════════════════════════════════════════════════");
@@ -243,6 +275,94 @@ public class AtomicAgentOrchestrator
         }
 
         return fixedCount;
+    }
+
+    /// <summary>
+    /// Executes Progressive Compilation: compiles all atoms together, groups errors, and fixes iteratively.
+    /// </summary>
+    private async Task<ProjectCompilationResult> ExecuteProgressiveCompilationAsync(List<Atom> atoms)
+    {
+        _logger.LogInformation("Starting Progressive Compilation with {Count} atoms", atoms.Count);
+        
+        for (int round = 1; round <= _maxProgressiveRounds; round++)
+        {
+            Console.WriteLine($"\n   🔄 Round {round}/{_maxProgressiveRounds}: Compiling entire project...");
+            
+            // Compile all atoms together
+            var compilationResult = _projectCompiler.CompileProject(atoms);
+            
+            if (compilationResult.Success)
+            {
+                Console.WriteLine($"      ✓ Project compiled successfully!");
+                return compilationResult;
+            }
+            
+            Console.WriteLine($"      ⚠️  Compilation failed: {compilationResult.TotalErrors} errors in {compilationResult.AtomsWithErrors} atoms");
+            
+            // Show error summary
+            foreach (var kvp in compilationResult.ErrorsByAtom.Take(5))
+            {
+                var atom = atoms.FirstOrDefault(a => a.Id == kvp.Key);
+                var atomName = atom?.Name ?? kvp.Key;
+                Console.WriteLine($"         - {kvp.Key} ({atomName}): {kvp.Value.Count} errors");
+            }
+            
+            if (compilationResult.AtomsWithErrors > 5)
+            {
+                Console.WriteLine($"         ... and {compilationResult.AtomsWithErrors - 5} more atoms with errors");
+            }
+            
+            // If this is the last round, return the result
+            if (round == _maxProgressiveRounds)
+            {
+                Console.WriteLine($"\n      ⚠️  Max rounds reached. Returning final state.");
+                return compilationResult;
+            }
+            
+            // Prioritize errored atoms by dependency order
+            var prioritizedAtoms = _projectCompiler.PrioritizeErroredAtoms(compilationResult.ErrorsByAtom, atoms);
+            
+            Console.WriteLine($"\n   🔧 Round {round}: Fixing {prioritizedAtoms.Count} errored atoms (dependency order)...");
+            
+            // Re-generate errored atoms with full error context
+            int fixedCount = 0;
+            foreach (var atomId in prioritizedAtoms)
+            {
+                var atom = atoms.FirstOrDefault(a => a.Id == atomId);
+                if (atom == null) continue;
+                
+                // Update atom with compilation errors
+                atom.CompileErrors = compilationResult.ErrorsByAtom[atomId];
+                atom.RetryCount = round - 1;
+                _blackboard.UpsertAtom(atom);
+                
+                // Reset status to pending for re-generation
+                _blackboard.UpdateAtomStatus(atomId, AtomStatus.Pending);
+                
+                Console.WriteLine($"      → Re-generating {atomId}: {atom.Name} ({atom.CompileErrors.Count} errors)...");
+                
+                // Re-execute atom with error feedback
+                var success = await _worker.ExecuteAtomAsync(atom);
+                
+                if (success)
+                {
+                    fixedCount++;
+                    // Write updated code to workspace
+                    await _workspace.WriteFileAsync(atom.FilePath, atom.GeneratedCode);
+                    Console.WriteLine($"         ✓ Re-generated successfully");
+                }
+                else
+                {
+                    Console.WriteLine($"         ✗ Re-generation failed");
+                }
+            }
+            
+            Console.WriteLine($"\n      📊 Round {round} Summary: {fixedCount}/{prioritizedAtoms.Count} atoms re-generated successfully");
+        }
+        
+        // Final compilation after all rounds
+        Console.WriteLine($"\n   🔄 Final compilation after {_maxProgressiveRounds} rounds...");
+        return _projectCompiler.CompileProject(atoms);
     }
 }
 
