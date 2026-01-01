@@ -61,6 +61,8 @@ public class BlackboardService
 
     /// <summary>
     /// Initializes the default Clean Architecture layers.
+    /// Note: Intra-layer dependencies (same layer) are always allowed.
+    /// AllowedDependencies lists only cross-layer dependencies.
     /// </summary>
     private void InitializeDefaultLayers()
     {
@@ -68,21 +70,21 @@ public class BlackboardService
         {
             Description = "Domain entities, Interfaces, and DTOs. Zero external dependencies.",
             ProjectPath = "src/Core/Core.csproj",
-            AllowedDependencies = new List<string>()
+            AllowedDependencies = new List<string>() // Core cannot depend on other layers
         };
 
         _manifest.ProjectHierarchy.Layers["Infrastructure"] = new Layer
         {
             Description = "Implementation of Core interfaces. Database access, File I/O, External APIs.",
             ProjectPath = "src/Infrastructure/Infrastructure.csproj",
-            AllowedDependencies = new List<string> { "Core" }
+            AllowedDependencies = new List<string> { "Core" } // Can depend on Core (and itself via intra-layer)
         };
 
         _manifest.ProjectHierarchy.Layers["Presentation"] = new Layer
         {
             Description = "Console UI or API endpoints. Entry point of the application.",
             ProjectPath = "src/Presentation/Presentation.csproj",
-            AllowedDependencies = new List<string> { "Core", "Infrastructure" }
+            AllowedDependencies = new List<string> { "Core", "Infrastructure" } // Can depend on Core and Infrastructure (and itself via intra-layer)
         };
     }
 
@@ -253,6 +255,7 @@ public class BlackboardService
 
     /// <summary>
     /// Validates architectural constraints (e.g., Core should not depend on Infrastructure).
+    /// Allows intra-layer dependencies (atoms in the same layer can depend on each other).
     /// </summary>
     public bool ValidateLayerDependencies(Atom atom)
     {
@@ -277,12 +280,22 @@ public class BlackboardService
             foreach (var depId in atom.Dependencies)
             {
                 var dep = _manifest.Atoms.FirstOrDefault(a => a.Id == depId);
-                if (dep != null && !layer.AllowedDependencies.Contains(dep.Layer))
+                if (dep != null)
                 {
-                    _logger.LogError(
-                        "Architectural violation: {Layer} atom {AtomId} depends on {DepLayer} atom {DepId}",
-                        atom.Layer, atom.Id, dep.Layer, dep.Id);
-                    return false;
+                    // Allow intra-layer dependencies (same layer)
+                    if (dep.Layer == atom.Layer)
+                    {
+                        continue;
+                    }
+                    
+                    // Check cross-layer dependencies against allowed list
+                    if (!layer.AllowedDependencies.Contains(dep.Layer))
+                    {
+                        _logger.LogError(
+                            "Architectural violation: {Layer} atom {AtomId} depends on {DepLayer} atom {DepId}",
+                            atom.Layer, atom.Id, dep.Layer, dep.Id);
+                        return false;
+                    }
                 }
             }
 
