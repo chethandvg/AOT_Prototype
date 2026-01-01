@@ -214,6 +214,177 @@ public class WorkspaceService
     }
 
     /// <summary>
+    /// Adds a project to an existing solution.
+    /// </summary>
+    public async Task<bool> AddProjectToSolutionAsync(string solutionName, string projectPath)
+    {
+        try
+        {
+            var solutionPath = GetSafePath($"{solutionName}.sln");
+            
+            if (!File.Exists(solutionPath))
+            {
+                _logger.LogError("Solution file not found: {SolutionPath}", solutionPath);
+                return false;
+            }
+
+            var processStartInfo = new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = "dotnet",
+                Arguments = $"sln \"{solutionPath}\" add \"{projectPath}\"",
+                WorkingDirectory = _rootPath,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false
+            };
+
+            using var process = System.Diagnostics.Process.Start(processStartInfo);
+            if (process == null)
+            {
+                _logger.LogError("Failed to start dotnet process");
+                return false;
+            }
+
+            await process.WaitForExitAsync();
+
+            if (process.ExitCode == 0)
+            {
+                _logger.LogInformation("Project added to solution: {ProjectPath}", projectPath);
+                return true;
+            }
+            else
+            {
+                var error = await process.StandardError.ReadToEndAsync();
+                _logger.LogError("Failed to add project to solution: {Error}", error);
+                return false;
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Exception while adding project to solution");
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Builds a project or solution using dotnet build.
+    /// Returns build result with success status and error messages.
+    /// </summary>
+    public async Task<BuildResult> BuildProjectAsync(string projectOrSolutionPath)
+    {
+        var result = new BuildResult();
+        
+        try
+        {
+            var fullPath = GetSafePath(projectOrSolutionPath);
+            
+            if (!File.Exists(fullPath))
+            {
+                result.Success = false;
+                result.ErrorOutput = $"Project/solution file not found: {fullPath}";
+                _logger.LogError(result.ErrorOutput);
+                return result;
+            }
+
+            var processStartInfo = new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = "dotnet",
+                Arguments = $"build \"{fullPath}\" --no-restore",
+                WorkingDirectory = _rootPath,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false
+            };
+
+            using var process = System.Diagnostics.Process.Start(processStartInfo);
+            if (process == null)
+            {
+                result.Success = false;
+                result.ErrorOutput = "Failed to start dotnet build process";
+                _logger.LogError(result.ErrorOutput);
+                return result;
+            }
+
+            await process.WaitForExitAsync();
+            result.StandardOutput = await process.StandardOutput.ReadToEndAsync();
+            result.ErrorOutput = await process.StandardError.ReadToEndAsync();
+            result.ExitCode = process.ExitCode;
+            result.Success = process.ExitCode == 0;
+
+            if (result.Success)
+            {
+                _logger.LogInformation("Build succeeded for {Path}", projectOrSolutionPath);
+            }
+            else
+            {
+                _logger.LogError("Build failed for {Path}: {Error}", projectOrSolutionPath, result.ErrorOutput);
+            }
+
+            return result;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Exception while building project");
+            result.Success = false;
+            result.ErrorOutput = ex.Message;
+            return result;
+        }
+    }
+
+    /// <summary>
+    /// Restores NuGet packages for a project or solution.
+    /// </summary>
+    public async Task<bool> RestorePackagesAsync(string projectOrSolutionPath)
+    {
+        try
+        {
+            var fullPath = GetSafePath(projectOrSolutionPath);
+            
+            if (!File.Exists(fullPath))
+            {
+                _logger.LogError("Project/solution file not found: {Path}", fullPath);
+                return false;
+            }
+
+            var processStartInfo = new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = "dotnet",
+                Arguments = $"restore \"{fullPath}\"",
+                WorkingDirectory = _rootPath,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false
+            };
+
+            using var process = System.Diagnostics.Process.Start(processStartInfo);
+            if (process == null)
+            {
+                _logger.LogError("Failed to start dotnet restore process");
+                return false;
+            }
+
+            await process.WaitForExitAsync();
+
+            if (process.ExitCode == 0)
+            {
+                _logger.LogInformation("Package restore succeeded for {Path}", projectOrSolutionPath);
+                return true;
+            }
+            else
+            {
+                var error = await process.StandardError.ReadToEndAsync();
+                _logger.LogError("Package restore failed: {Error}", error);
+                return false;
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Exception while restoring packages");
+            return false;
+        }
+    }
+
+    /// <summary>
     /// Validates that a project or solution name contains only safe characters.
     /// Prevents command injection by restricting to alphanumeric, underscores, hyphens, and periods.
     /// </summary>
@@ -225,6 +396,17 @@ public class WorkspaceService
         // Allow only alphanumeric characters, underscores, hyphens, and periods
         return System.Text.RegularExpressions.Regex.IsMatch(name, @"^[a-zA-Z0-9_\-\.]+$");
     }
+}
+
+/// <summary>
+/// Result of a dotnet build operation.
+/// </summary>
+public class BuildResult
+{
+    public bool Success { get; set; }
+    public int ExitCode { get; set; }
+    public string StandardOutput { get; set; } = string.Empty;
+    public string ErrorOutput { get; set; } = string.Empty;
 }
 
 public class WorkspaceSecurityException : Exception

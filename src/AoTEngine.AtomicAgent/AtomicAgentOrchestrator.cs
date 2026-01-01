@@ -113,6 +113,52 @@ public class AtomicAgentOrchestrator
                 Console.WriteLine($"   - {atom.Id} ({atom.Type}): {atom.Name} [deps: {deps}]");
             }
 
+            // Phase 2.5: Initialize physical project structure (for Progressive mode)
+            string? solutionPath = null;
+            if (_compilationMode == "Progressive" && _validateAfterAllGenerated)
+            {
+                Console.WriteLine("\n🏗️  Phase 2.5: Initializing physical solution structure...");
+                
+                var projectName = _blackboard.Manifest.ProjectMetadata.Name;
+                var solutionName = projectName;
+                
+                // Create solution
+                Console.WriteLine($"   Creating solution: {solutionName}.sln");
+                var solutionCreated = await _workspace.InitializeSolutionAsync(solutionName);
+                if (!solutionCreated)
+                {
+                    _logger.LogError("Failed to create solution");
+                    result.Success = false;
+                    result.ErrorMessage = "Failed to create physical solution structure";
+                    return result;
+                }
+                
+                solutionPath = _workspace.GetSafePath($"{solutionName}.sln");
+                
+                // Create projects for each layer
+                var layers = atoms.Select(a => a.Layer).Distinct().ToList();
+                foreach (var layer in layers)
+                {
+                    var layerProjectName = $"{projectName}.{layer}";
+                    var layerPath = $"src/{layer}";
+                    
+                    Console.WriteLine($"   Creating project: {layerProjectName} in {layerPath}");
+                    var projectCreated = await _workspace.CreateClassLibraryAsync(layerProjectName, layerPath);
+                    if (projectCreated)
+                    {
+                        // Add project to solution
+                        var projectFilePath = _workspace.GetSafePath($"{layerPath}/{layerProjectName}.csproj");
+                        await _workspace.AddProjectToSolutionAsync(solutionName, projectFilePath);
+                    }
+                    else
+                    {
+                        _logger.LogWarning("Failed to create project for layer {Layer}", layer);
+                    }
+                }
+                
+                Console.WriteLine($"   ✓ Solution structure created successfully");
+            }
+
             // Phase 3: Execution Loop (Section 8)
             Console.WriteLine("\n⚙️  Phase 3: Executing atoms in dependency order...");
             
@@ -183,12 +229,12 @@ public class AtomicAgentOrchestrator
             }
 
             // Phase 3.5: Progressive Compilation (if enabled)
-            if (_compilationMode == "Progressive" && _validateAfterAllGenerated)
+            if (_compilationMode == "Progressive" && _validateAfterAllGenerated && solutionPath != null)
             {
                 Console.WriteLine("\n🔧 Phase 3.5: Progressive Compilation Mode");
                 Console.WriteLine("═══════════════════════════════════════════════════");
                 
-                var progressiveResult = await ExecuteProgressiveCompilationAsync(atoms);
+                var progressiveResult = await ExecuteProgressiveCompilationAsync(atoms, solutionPath);
                 
                 if (progressiveResult.Success)
                 {
@@ -278,26 +324,26 @@ public class AtomicAgentOrchestrator
     }
 
     /// <summary>
-    /// Executes Progressive Compilation: compiles all atoms together, groups errors, and fixes iteratively.
+    /// Executes Progressive Compilation: compiles all atoms together using dotnet build, groups errors, and fixes iteratively.
     /// </summary>
-    private async Task<ProjectCompilationResult> ExecuteProgressiveCompilationAsync(List<Atom> atoms)
+    private async Task<ProjectCompilationResult> ExecuteProgressiveCompilationAsync(List<Atom> atoms, string solutionPath)
     {
-        _logger.LogInformation("Starting Progressive Compilation with {Count} atoms", atoms.Count);
+        _logger.LogInformation("Starting Progressive Compilation with {Count} atoms using physical project build", atoms.Count);
         
         for (int round = 1; round <= _maxProgressiveRounds; round++)
         {
-            Console.WriteLine($"\n   🔄 Round {round}/{_maxProgressiveRounds}: Compiling entire project...");
+            Console.WriteLine($"\n   🔄 Round {round}/{_maxProgressiveRounds}: Building entire project with dotnet build...");
             
-            // Compile all atoms together
-            var compilationResult = _projectCompiler.CompileProject(atoms);
+            // Compile all atoms together using dotnet build
+            var compilationResult = await _projectCompiler.CompileProjectAsync(atoms, solutionPath);
             
             if (compilationResult.Success)
             {
-                Console.WriteLine($"      ✓ Project compiled successfully!");
+                Console.WriteLine($"      ✓ Project built successfully!");
                 return compilationResult;
             }
             
-            Console.WriteLine($"      ⚠️  Compilation failed: {compilationResult.TotalErrors} errors in {compilationResult.AtomsWithErrors} atoms");
+            Console.WriteLine($"      ⚠️  Build failed: {compilationResult.TotalErrors} errors in {compilationResult.AtomsWithErrors} atoms");
             
             // Show error summary
             foreach (var kvp in compilationResult.ErrorsByAtom.Take(5))
@@ -361,8 +407,8 @@ public class AtomicAgentOrchestrator
         }
         
         // Final compilation after all rounds
-        Console.WriteLine($"\n   🔄 Final compilation after {_maxProgressiveRounds} rounds...");
-        return _projectCompiler.CompileProject(atoms);
+        Console.WriteLine($"\n   🔄 Final build after {_maxProgressiveRounds} rounds...");
+        return await _projectCompiler.CompileProjectAsync(atoms, solutionPath);
     }
 }
 
