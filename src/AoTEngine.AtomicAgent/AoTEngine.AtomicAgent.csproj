@@ -1,0 +1,42 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Existing AoT Engine modules -->
+    <ProjectReference Include="..\AoTEngine.Models\AoTEngine.Models.csproj" />
+    <ProjectReference Include="..\AoTEngine.Services.AI\AoTEngine.Services.AI.csproj" />
+    <ProjectReference Include="..\AoTEngine.Services.Compilation\AoTEngine.Services.Compilation.csproj" />
+    <ProjectReference Include="..\AoTEngine.Services.Contracts\AoTEngine.Services.Contracts.csproj" />
+    <ProjectReference Include="..\AoTEngine.Services.Validation\AoTEngine.Services.Validation.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Microsoft Extensions for DI, Configuration, Hosting -->
+    <PackageReference Include="Microsoft.Extensions.Hosting" Version="9.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Configuration" Version="9.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="9.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.EnvironmentVariables" Version="9.0.0" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="9.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Console" Version="9.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Caching.Memory" Version="9.0.0" />
+    
+    <!-- .env file support -->
+    <PackageReference Include="dotenv.net" Version="3.2.1" />
+    
+    <!-- OpenAI SDK - match existing version -->
+    <PackageReference Include="OpenAI" Version="2.8.0" />
+    
+    <!-- JSON serialization - match existing version -->
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
+    
+    <!-- Roslyn C# compiler for Microsoft.CodeAnalysis types -->
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.11.0" />
+  </ItemGroup>
+
+</Project>

@@ -2,7 +2,104 @@
 
 All notable changes and improvements to the AoT Engine project.
 
-## [Latest] - OpenAI Model Updates & HttpClient for Code Generation
+## [Latest] - Atomic Thought Framework Implementation
+
+### New Project: AoTEngine.AtomicAgent
+
+A standalone implementation of the **Atomic Thought Framework** architectural blueprint, introducing a DAG-based autonomous coding agent with dependency management and persistent state tracking.
+
+#### Key Features
+
+**1. Blackboard Pattern (Shared State)**
+- Persistent `solution_manifest.json` tracking:
+  - **Structural**: File paths, project hierarchy (Core/Infrastructure/Presentation)
+  - **Temporal**: Atom status (pending → in_progress → review → completed/failed)
+  - **Semantic**: High-fidelity type signatures (interfaces, DTOs)
+- Thread-safe operations with defensive copying
+- Architectural constraint validation (Core has zero dependencies)
+- Auto-save functionality
+
+**2. Planner Agent (Abstractions First)**
+- **Abstractions First Strategy**: DTOs → Interfaces → Implementations
+- **Topological Sort**: Kahn's Algorithm for dependency resolution
+- Circular dependency detection with automatic retry
+- Automatic layer assignment (Core/Infrastructure/Presentation)
+- Validates architectural rules before execution
+
+**3. Context Engine (Tiered Injection)**
+- **Tier 1 (Global)**: Project metadata, layers, completed files
+- **Tier 2 (Local)**: Semantic signatures of dependencies (~70% token reduction)
+- **Tier 3 (Target)**: Specific atom requirements with type-specific instructions
+- Hot cache with sliding expiration (30 min)
+- Token-efficient prompt construction
+
+**4. Roslyn Feedback Loop (Self-Correction)**
+- In-memory compilation using `CSharpCompilation`
+- Compiles against dependency source code (no DLL required)
+- **Semantic Extraction**: Parses syntax trees to populate Symbol Table
+- Self-correcting cycle: compile → errors → LLM feedback → regenerate
+- Up to 3 retry attempts per atom
+
+**5. Workspace Service (Sandboxed File System)**
+- Path validation to prevent directory traversal
+- Security boundaries enforcing workspace root
+- Command injection protection (validates project/solution names)
+- Project scaffolding using `dotnet` CLI
+
+**6. Clarification Loop (Ambiguity Detection)**
+- Vague term analysis (threshold: 3+ vague terms)
+- Interactive user prompts for missing specifications
+- Enriches requests with clarified context
+
+**7. Atomic Worker Agent (Code Generation)**
+- Context-aware code generation via OpenAI
+- Markdown extraction for clean code output
+- Retry loop with compilation error feedback
+- Integration with Roslyn for validation
+
+#### Architecture Comparison
+
+| Aspect | AoTEngine | AtomicAgent |
+|--------|-----------|-------------|
+| Planning | Task decomposition | DAG with topological sort |
+| State | In-memory TaskNodes | Persistent JSON manifest |
+| Context | Full code injection | Signature-based tiers |
+| Validation | Batch + Hybrid modes | Per-atom with Roslyn feedback |
+| Dependencies | Task graph | Atom dependency graph |
+
+#### Security Enhancements
+- Command injection protection via regex validation
+- Thread-safe Manifest property with defensive copying
+- Workspace-safe path construction with normalized casing
+- Fixed inverted `suppressWarnings` logic in Roslyn
+
+#### New Models
+- **SolutionManifest**: JSON schema for blackboard state
+- **Atom**: Atomic unit of work with status tracking
+- **ProjectMetadata**: Project information with proper timestamp initialization
+- **Layer**: Clean Architecture layer definition with dependency rules
+
+#### Configuration
+- `.NET Generic Host` for DI and lifecycle management
+- `appsettings.json` with component-specific settings
+- `.env` file support for API keys
+- Configurable retry counts, cache expiration, validation modes
+
+#### Documentation
+- **README.md**: Project overview and usage guide
+- **ATOMIC_AGENT_IMPLEMENTATION_SUMMARY.md**: Detailed implementation analysis
+- 11 unit tests covering TopologicalSorter and SolutionManifest
+- All 142 tests passing (131 existing + 11 new)
+
+#### Future Enhancements
+- Token Garbage Collection (Component 8/8) - deferred
+- OpenAI Assistant SDK integration (currently using ChatClient)
+- Parallel atom execution (currently sequential)
+- Multi-session project continuity
+
+---
+
+## [Previous] - OpenAI Model Updates & HttpClient for Code Generation
 
 ### Breaking Changes
 

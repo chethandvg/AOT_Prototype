@@ -13,6 +13,39 @@ The AoT Engine is a sophisticated C# application that leverages OpenAI's GPT mod
 - **[ARCHITECTURE.md](ARCHITECTURE.md)** - Detailed system architecture and technical design
 - **[USAGE.md](USAGE.md)** - Comprehensive usage examples and scenarios
 - **[CHANGELOG.md](CHANGELOG.md)** - Complete feature reference and version history
+- **[ATOMIC_AGENT_IMPLEMENTATION_SUMMARY.md](ATOMIC_AGENT_IMPLEMENTATION_SUMMARY.md)** - Atomic Thought Framework implementation details
+- **[src/AoTEngine.AtomicAgent/GETTING_STARTED.md](src/AoTEngine.AtomicAgent/GETTING_STARTED.md)** - Getting started with AtomicAgent
+- **[src/AoTEngine.AtomicAgent/README.md](src/AoTEngine.AtomicAgent/README.md)** - AtomicAgent project documentation
+
+## 🚀 Projects
+
+This repository contains two main implementations:
+
+### 1. **AoTEngine** (Original Implementation)
+A modular, task-based parallel code generation system with contract-first generation, documentation synthesis, and advanced code integration.
+
+**Location**: `src/AoTEngine/`
+
+**Key Features**:
+- Task decomposition with parallel execution
+- Contract-first generation (frozen interfaces, enums, DTOs)
+- Advanced code integration with auto-fix
+- Documentation generation (Markdown, JSON, JSONL)
+- Incremental checkpoint system
+
+### 2. **AoTEngine.AtomicAgent** ⭐ NEW
+A DAG-based autonomous coding agent implementing the "Atomic Thought Framework" architectural blueprint.
+
+**Location**: `src/AoTEngine.AtomicAgent/`
+
+**Key Innovations**:
+- **Blackboard Pattern**: Persistent state via `solution_manifest.json`
+- **Abstractions First**: DTOs → Interfaces → Implementations with topological sort
+- **Tiered Context Injection**: 70% token reduction using signatures instead of full code
+- **Roslyn Feedback Loop**: Self-correcting compilation errors → LLM feedback → regenerate
+- **Clean Architecture Enforcement**: Validates Core layer has zero dependencies
+
+**Documentation**: See [src/AoTEngine.AtomicAgent/README.md](src/AoTEngine.AtomicAgent/README.md) and [ATOMIC_AGENT_IMPLEMENTATION_SUMMARY.md](ATOMIC_AGENT_IMPLEMENTATION_SUMMARY.md)
 
 ## Features
 
@@ -104,7 +137,8 @@ src/
 ├── AoTEngine.Services.Integration/      # Code merging and integration
 ├── AoTEngine.Services.Validation/       # Code validation
 ├── AoTEngine.Core/                      # Core orchestration engine
-└── AoTEngine/                           # Main executable (CLI)
+├── AoTEngine/                           # Main executable (CLI)
+└── AoTEngine.AtomicAgent/               # ⭐ NEW: Atomic Thought Framework implementation
 ```
 
 **Key Components**:
@@ -116,6 +150,7 @@ src/
 - **Services.Integration**: Code merging, auto-fix, complexity analysis
 - **Services.Validation**: Code validation using Roslyn
 - **Core**: Parallel execution engine, workflow orchestration
+- **AtomicAgent**: Blackboard, Planner, Context Engine, Roslyn Feedback Loop
 
 ## Prerequisites
 
