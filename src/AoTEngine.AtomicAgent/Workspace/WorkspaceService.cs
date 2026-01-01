@@ -137,8 +137,12 @@ public class WorkspaceService
                 return false;
             }
 
+            // Read output streams asynchronously to prevent deadlock
+            var outputTask = process.StandardOutput.ReadToEndAsync();
+            var errorTask = process.StandardError.ReadToEndAsync();
+            
             await process.WaitForExitAsync();
-            var error = await process.StandardError.ReadToEndAsync();
+            var error = await errorTask;
 
             if (process.ExitCode == 0)
             {
@@ -216,6 +220,10 @@ public class WorkspaceService
                 return false;
             }
 
+            // Read output streams asynchronously to prevent deadlock
+            var outputTask = process.StandardOutput.ReadToEndAsync();
+            var errorTask = process.StandardError.ReadToEndAsync();
+            
             await process.WaitForExitAsync();
 
             if (process.ExitCode == 0)
@@ -237,7 +245,7 @@ public class WorkspaceService
             }
             else
             {
-                var error = await process.StandardError.ReadToEndAsync();
+                var error = await errorTask;
                 _logger.LogError("Failed to create {Template} project: {Error}", template, error);
                 return false;
             }
@@ -288,9 +296,13 @@ public class WorkspaceService
                 return false;
             }
 
+            // Read output streams asynchronously to prevent deadlock
+            var outputTask = process.StandardOutput.ReadToEndAsync();
+            var errorTask = process.StandardError.ReadToEndAsync();
+            
             await process.WaitForExitAsync();
-            var output = await process.StandardOutput.ReadToEndAsync();
-            var error = await process.StandardError.ReadToEndAsync();
+            var output = await outputTask;
+            var error = await errorTask;
 
             if (process.ExitCode == 0)
             {
@@ -350,9 +362,14 @@ public class WorkspaceService
                 return result;
             }
 
+            // Read output streams asynchronously to prevent deadlock
+            var outputTask = process.StandardOutput.ReadToEndAsync();
+            var errorTask = process.StandardError.ReadToEndAsync();
+            
             await process.WaitForExitAsync();
-            result.StandardOutput = await process.StandardOutput.ReadToEndAsync();
-            result.ErrorOutput = await process.StandardError.ReadToEndAsync();
+            
+            result.StandardOutput = await outputTask;
+            result.ErrorOutput = await errorTask;
             result.ExitCode = process.ExitCode;
             result.Success = process.ExitCode == 0;
 
@@ -408,6 +425,10 @@ public class WorkspaceService
                 return false;
             }
 
+            // Read output streams asynchronously to prevent deadlock
+            var outputTask = process.StandardOutput.ReadToEndAsync();
+            var errorTask = process.StandardError.ReadToEndAsync();
+            
             await process.WaitForExitAsync();
 
             if (process.ExitCode == 0)
@@ -417,7 +438,7 @@ public class WorkspaceService
             }
             else
             {
-                var error = await process.StandardError.ReadToEndAsync();
+                var error = await errorTask;
                 _logger.LogError("Package restore failed: {Error}", error);
                 return false;
             }
