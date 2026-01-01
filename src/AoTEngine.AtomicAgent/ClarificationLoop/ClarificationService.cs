@@ -93,23 +93,29 @@ public class ClarificationService
         Console.WriteLine($"Original Request: {originalRequest}");
         Console.WriteLine();
         Console.WriteLine("Please clarify the following:");
-        Console.WriteLine("1. What type of storage? (database/file/memory/none)");
+        
+        Console.WriteLine("1. What type of application? (console/webapi/mvc/blazor)");
+        Console.Write("   Application Type: ");
+        var applicationType = Console.ReadLine()?.Trim() ?? "console";
+
+        Console.WriteLine("2. What type of storage? (database/file/memory/none)");
         Console.Write("   Storage: ");
         var storage = Console.ReadLine()?.Trim() ?? "memory";
 
-        Console.WriteLine("2. What type of interface? (console/api/web/none)");
-        Console.Write("   Interface: ");
-        var interfaceType = Console.ReadLine()?.Trim() ?? "console";
+        Console.WriteLine("3. What type of output/reporting? (console/json/csv/report)");
+        Console.Write("   Output: ");
+        var outputType = Console.ReadLine()?.Trim() ?? "console";
 
-        Console.WriteLine("3. Any specific frameworks or libraries to use? (or 'none')");
+        Console.WriteLine("4. Any specific frameworks or libraries to use? (or 'none')");
         Console.Write("   Frameworks: ");
         var frameworks = Console.ReadLine()?.Trim() ?? "none";
 
         var enrichedRequest = $@"{originalRequest}
 
 CLARIFICATIONS:
+- Application Type: {applicationType}
 - Storage: {storage}
-- Interface: {interfaceType}
+- Output/Reporting: {outputType}
 - Frameworks: {frameworks}";
 
         _logger.LogInformation("Request enriched with clarifications");

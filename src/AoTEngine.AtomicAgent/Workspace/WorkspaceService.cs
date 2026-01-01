@@ -163,6 +163,30 @@ public class WorkspaceService
     /// </summary>
     public async Task<bool> CreateClassLibraryAsync(string projectName, string relativePath)
     {
+        return await CreateProjectAsync(projectName, relativePath, "classlib");
+    }
+
+    /// <summary>
+    /// Creates a console application project using the dotnet CLI.
+    /// </summary>
+    public async Task<bool> CreateConsoleAppAsync(string projectName, string relativePath)
+    {
+        return await CreateProjectAsync(projectName, relativePath, "console");
+    }
+
+    /// <summary>
+    /// Creates a web API project using the dotnet CLI.
+    /// </summary>
+    public async Task<bool> CreateWebApiAsync(string projectName, string relativePath)
+    {
+        return await CreateProjectAsync(projectName, relativePath, "webapi");
+    }
+
+    /// <summary>
+    /// Creates a project using the dotnet CLI with the specified template.
+    /// </summary>
+    private async Task<bool> CreateProjectAsync(string projectName, string relativePath, string template)
+    {
         try
         {
             // Validate project name to prevent command injection
@@ -178,7 +202,7 @@ public class WorkspaceService
             var processStartInfo = new System.Diagnostics.ProcessStartInfo
             {
                 FileName = "dotnet",
-                Arguments = $"new classlib -o . -n {projectName} -f net9.0",
+                Arguments = $"new {template} -o . -n {projectName} -f net9.0",
                 WorkingDirectory = projectDir,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
@@ -196,14 +220,17 @@ public class WorkspaceService
 
             if (process.ExitCode == 0)
             {
-                _logger.LogInformation("Class library created: {ProjectName} at {Path}", projectName, projectDir);
+                _logger.LogInformation("{Template} project created: {ProjectName} at {Path}", template, projectName, projectDir);
                 
                 // Delete the default Class1.cs file created by dotnet new classlib
-                var defaultClassFile = Path.Combine(projectDir, "Class1.cs");
-                if (File.Exists(defaultClassFile))
+                if (template == "classlib")
                 {
-                    File.Delete(defaultClassFile);
-                    _logger.LogDebug("Deleted default Class1.cs file");
+                    var defaultClassFile = Path.Combine(projectDir, "Class1.cs");
+                    if (File.Exists(defaultClassFile))
+                    {
+                        File.Delete(defaultClassFile);
+                        _logger.LogDebug("Deleted default Class1.cs file");
+                    }
                 }
                 
                 return true;
@@ -211,13 +238,13 @@ public class WorkspaceService
             else
             {
                 var error = await process.StandardError.ReadToEndAsync();
-                _logger.LogError("Failed to create class library: {Error}", error);
+                _logger.LogError("Failed to create {Template} project: {Error}", template, error);
                 return false;
             }
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Exception while creating class library");
+            _logger.LogError(ex, "Exception while creating {Template} project", template);
             return false;
         }
     }

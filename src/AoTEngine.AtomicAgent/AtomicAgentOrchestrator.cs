@@ -143,7 +143,18 @@ public class AtomicAgentOrchestrator
                     var layerPath = $"src/{layer}";
                     
                     Console.WriteLine($"   Creating project: {layerProjectName} in {layerPath}");
-                    var projectCreated = await _workspace.CreateClassLibraryAsync(layerProjectName, layerPath);
+                    
+                    bool projectCreated;
+                    // Create console app for Presentation layer, classlib for others
+                    if (layer == "Presentation")
+                    {
+                        projectCreated = await _workspace.CreateConsoleAppAsync(layerProjectName, layerPath);
+                    }
+                    else
+                    {
+                        projectCreated = await _workspace.CreateClassLibraryAsync(layerProjectName, layerPath);
+                    }
+                    
                     if (projectCreated)
                     {
                         // Add project to solution using relative path from workspace root

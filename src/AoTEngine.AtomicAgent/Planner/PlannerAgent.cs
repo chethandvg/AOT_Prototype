@@ -97,11 +97,36 @@ public class PlannerAgent
     {
         var prompt = $@"You are an expert C# Architect. Decompose the following request into atomic tasks (called ""Atoms"").
 
-CRITICAL INSTRUCTIONS - Abstractions First Strategy:
-1. Identify all nouns (Entities/DTOs) and define them as 'dto' type atoms FIRST
-2. Identify all verbs (Capabilities) and define them as 'interface' type atoms SECOND
-3. Only THEN define 'implementation' type atoms that implement the interfaces
-4. This prevents circular dependencies and ensures clean architecture
+CRITICAL INSTRUCTIONS - Abstractions First Strategy and Complete Application:
+
+1. ALWAYS CREATE A PRESENTATION LAYER WITH AN ENTRY POINT:
+   - For console applications: Create a Program.cs with Main method in Presentation layer
+   - For Web APIs: Create Controllers and Program.cs in Presentation layer
+   - For MVC/Blazor: Create appropriate entry points and views in Presentation layer
+   - The application MUST be executable - not just class libraries!
+
+2. UNDERSTAND THE DOMAIN COMPLEXITY:
+   - Analyze all entities, operations, and data flows mentioned
+   - Create appropriate DTOs for all data structures
+   - Define interfaces for all services and repositories
+   - Consider error handling, validation, and business rules
+
+3. Abstractions First Order:
+   a. Identify all nouns (Entities/DTOs) and define them as 'dto' type atoms FIRST
+   b. Identify all verbs (Capabilities) and define them as 'interface' type atoms SECOND
+   c. Define 'implementation' type atoms in Infrastructure layer
+   d. Define Presentation layer atoms (Program, Controllers, etc.) LAST
+
+4. LAYER RULES:
+   - Core: DTOs and Interfaces only (ZERO dependencies on other layers)
+   - Infrastructure: Implementations of Core interfaces (depends on Core)
+   - Presentation: Entry points, Controllers, UI (depends on Core and Infrastructure)
+
+5. FOR THIS REQUEST, CREATE:
+   - All necessary DTOs representing data structures
+   - All service/repository interfaces
+   - All implementations
+   - A COMPLETE Presentation layer with Program.cs as entry point
 
 Request: {userRequest}
 
@@ -112,30 +137,37 @@ For each atom, specify:
 - Type: 'dto', 'interface', or 'implementation'
 - Name: The class/interface name
 - Layer: 'Core', 'Infrastructure', or 'Presentation'
-- Dependencies: List of atom IDs this depends on (interfaces and DTOs should have NO dependencies)
+- Dependencies: List of atom IDs this depends on
 - Description: What this atom implements
 
-Example response structure:
+Example for a CSV analysis application:
 Atom ID: atom_001
 Type: dto
-Name: UserDto
+Name: CountryDataDto
 Layer: Core
 Dependencies: []
-Description: Data transfer object for user information
+Description: Data transfer object for country oil production/consumption data
 
 Atom ID: atom_002
 Type: interface
-Name: IUserRepository
+Name: ICsvReaderService
 Layer: Core
 Dependencies: [atom_001]
-Description: Interface for user data access
+Description: Interface for reading CSV files and parsing country data
 
 Atom ID: atom_003
 Type: implementation
-Name: FileUserRepository
+Name: CsvReaderService
 Layer: Infrastructure
 Dependencies: [atom_001, atom_002]
-Description: File-based implementation of IUserRepository";
+Description: Implements CSV reading and parsing logic
+
+Atom ID: atom_004
+Type: implementation
+Name: Program
+Layer: Presentation
+Dependencies: [atom_001, atom_002, atom_003]
+Description: Console application entry point with Main method";
 
         return prompt;
     }
