@@ -1,0 +1,228 @@
+@page "/buildings/{id:int}"
+@using PropertyManagement.Models
+@inject HttpClient Http
+@inject NavigationManager NavigationManager
+
+<PageTitle>Building Details</PageTitle>
+
+@if (building == null)
+{
+    <p><em>Loading...</em></p>
+}
+else
+{
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1>@building.Name</h1>
+        <div>
+            <button class="btn btn-outline-secondary" @onclick="GoBack">Back to List</button>
+        </div>
+    </div>
+
+    <div class="card mb-3">
+        <div class="card-body">
+            <h5 class="card-title">Building Information</h5>
+            <div class="row">
+                <div class="col-md-6">
+                    <p><strong>Code:</strong> @building.Code</p>
+                    <p><strong>Property Type:</strong> @building.PropertyType</p>
+                    <p><strong>Organization:</strong> @building.OrganizationId</p>
+                </div>
+                <div class="col-md-6">
+                    <p><strong>Address:</strong><br />
+                        @building.Address.Street<br />
+                        @building.Address.City, @building.Address.State @building.Address.PostalCode<br />
+                        @building.Address.Country
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <ul class="nav nav-tabs mb-3" role="tablist">
+        <li class="nav-item" role="presentation">
+            <button class="nav-link @(activeTab == "units" ? "active" : "")" @onclick='() => activeTab = "units"'>
+                Units (@building.Units.Count)
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link @(activeTab == "ownership" ? "active" : "")" @onclick='() => activeTab = "ownership"'>
+                Ownership
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link @(activeTab == "documents" ? "active" : "")" @onclick='() => activeTab = "documents"'>
+                Documents
+            </button>
+        </li>
+    </ul>
+
+    <div class="tab-content">
+        @if (activeTab == "units")
+        {
+            <div class="tab-pane fade show active">
+                <h4>Units</h4>
+                <div class="mb-3">
+                    <a href="/buildings/@Id/units/add" class="btn btn-primary">Add Unit</a>
+                    <a href="/buildings/@Id/units/bulk-add" class="btn btn-secondary">Bulk Add Units</a>
+                </div>
+                <table class="table table-striped">
+                    <thead>
+                        <tr>
+                            <th>Unit Number</th>
+                            <th>Floor</th>
+                            <th>Type</th>
+                            <th>Furnishing</th>
+                            <th>Status</th>
+                            <th>Override</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var unit in building.Units)
+                        {
+                            <tr>
+                                <td>@unit.UnitNumber</td>
+                                <td>@unit.Floor</td>
+                                <td>@unit.Type</td>
+                                <td>@unit.Furnishing</td>
+                                <td>@unit.Status</td>
+                                <td>
+                                    @if (unit.HasOwnershipOverride)
+                                    {
+                                        <span class="badge bg-warning">Override</span>
+                                    }
+                                </td>
+                                <td>
+                                    <a href="/units/@unit.Id" class="btn btn-sm btn-primary">Details</a>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+        else if (activeTab == "ownership")
+        {
+            <div class="tab-pane fade show active">
+                <h4>Building Ownership</h4>
+                <p class="text-muted">Manage ownership shares for this building. Total must equal 100%.</p>
+                @if (ownershipShares != null && ownershipShares.Any())
+                {
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>Owner</th>
+                                <th>Share %</th>
+                                <th>Effective Date</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var share in ownershipShares)
+                            {
+                                <tr>
+                                    <td>@share.Owner.Name</td>
+                                    <td>@share.SharePercent%</td>
+                                    <td>@share.EffectiveDate.ToShortDateString()</td>
+                                </tr>
+                            }
+                        </tbody>
+                        <tfoot>
+                            <tr>
+                                <th>Total</th>
+                                <th>@ownershipShares.Sum(s => s.SharePercent)%</th>
+                                <th></th>
+                            </tr>
+                        </tfoot>
+                    </table>
+                }
+                else
+                {
+                    <p>No ownership shares defined.</p>
+                }
+                <button class="btn btn-primary">Edit Ownership</button>
+            </div>
+        }
+        else if (activeTab == "documents")
+        {
+            <div class="tab-pane fade show active">
+                <h4>Documents & Photos</h4>
+                @if (buildingFiles != null && buildingFiles.Any())
+                {
+                    <div class="row row-cols-1 row-cols-md-4 g-3">
+                        @foreach (var file in buildingFiles)
+                        {
+                            <div class="col">
+                                <div class="card">
+                                    <div class="card-body">
+                                        <h6 class="card-title">@file.FileName</h6>
+                                        <p class="card-text">
+                                            <small class="text-muted">
+                                                Type: @file.FileType<br />
+                                                Size: @FormatFileSize(file.FileSize)<br />
+                                                Uploaded: @file.UploadedAt.ToShortDateString()
+                                            </small>
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                }
+                else
+                {
+                    <p>No files uploaded.</p>
+                }
+                <div class="mt-3">
+                    <button class="btn btn-primary">Upload Files</button>
+                </div>
+            </div>
+        }
+    </div>
+}
+
+@code {
+    [Parameter]
+    public int Id { get; set; }
+
+    private Building? building;
+    private BuildingOwnershipShare[]? ownershipShares;
+    private BuildingFile[]? buildingFiles;
+    private string activeTab = "units";
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadBuilding();
+    }
+
+    private async Task LoadBuilding()
+    {
+        try
+        {
+            building = await Http.GetFromJsonAsync<Building>($"api/buildings/{Id}");
+            ownershipShares = await Http.GetFromJsonAsync<BuildingOwnershipShare[]>($"api/ownership/buildings/{Id}");
+            buildingFiles = await Http.GetFromJsonAsync<BuildingFile[]>($"api/files/buildings/{Id}");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading building: {ex.Message}");
+        }
+    }
+
+    private void GoBack()
+    {
+        NavigationManager.NavigateTo("/buildings");
+    }
+
+    private string FormatFileSize(long bytes)
+    {
+        string[] sizes = { "B", "KB", "MB", "GB" };
+        double len = bytes;
+        int order = 0;
+        while (len >= 1024 && order < sizes.Length - 1)
+        {
+            order++;
+            len = len / 1024;
+        }
+        return $"{len:0.##} {sizes[order]}";
+    }
+}
