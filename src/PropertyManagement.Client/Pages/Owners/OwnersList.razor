@@ -1,0 +1,203 @@
+@page "/owners"
+@using PropertyManagement.Models
+@inject HttpClient Http
+
+<PageTitle>Owners</PageTitle>
+
+<h1>Owners</h1>
+
+<div class="mb-3">
+    <div class="row">
+        <div class="col-md-9">
+            <input type="text" class="form-control" placeholder="Search by name or email" @bind="searchText" @bind:event="oninput" />
+        </div>
+        <div class="col-md-3">
+            <button class="btn btn-primary w-100" @onclick="ShowAddOwnerModal">Add Owner</button>
+        </div>
+    </div>
+</div>
+
+@if (owners == null)
+{
+    <p><em>Loading...</em></p>
+}
+else
+{
+    <table class="table table-striped">
+        <thead>
+            <tr>
+                <th>Name</th>
+                <th>Email</th>
+                <th>Phone</th>
+                <th>Properties</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var owner in FilteredOwners)
+            {
+                <tr>
+                    <td>@owner.Name</td>
+                    <td>@owner.Email</td>
+                    <td>@owner.Phone</td>
+                    <td>
+                        Buildings: @owner.BuildingShares.Count<br />
+                        Units: @owner.UnitShares.Count
+                    </td>
+                    <td>
+                        <button class="btn btn-sm btn-primary" @onclick="() => ShowEditOwnerModal(owner)">Edit</button>
+                        <button class="btn btn-sm btn-danger" @onclick="() => DeleteOwner(owner.Id)">Delete</button>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@if (showModal)
+{
+    <div class="modal fade show d-block" tabindex="-1" role="dialog" style="background-color: rgba(0,0,0,0.5);">
+        <div class="modal-dialog" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">@(editingOwner.Id == 0 ? "Add Owner" : "Edit Owner")</h5>
+                    <button type="button" class="btn-close" @onclick="HideModal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="ownerName" class="form-label">Name</label>
+                        <input type="text" class="form-control" id="ownerName" @bind="editingOwner.Name" />
+                    </div>
+                    <div class="mb-3">
+                        <label for="ownerEmail" class="form-label">Email</label>
+                        <input type="email" class="form-control" id="ownerEmail" @bind="editingOwner.Email" />
+                    </div>
+                    <div class="mb-3">
+                        <label for="ownerPhone" class="form-label">Phone</label>
+                        <input type="tel" class="form-control" id="ownerPhone" @bind="editingOwner.Phone" />
+                    </div>
+                    <div class="mb-3">
+                        <label for="ownerOrg" class="form-label">Organization ID</label>
+                        <input type="text" class="form-control" id="ownerOrg" @bind="editingOwner.OrganizationId" />
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="HideModal">Cancel</button>
+                    <button type="button" class="btn btn-primary" @onclick="SaveOwner">Save</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private Owner[]? owners;
+    private string searchText = "";
+    private bool showModal = false;
+    private Owner editingOwner = new() { Name = "", Email = "", OrganizationId = "ORG001" };
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadOwners();
+    }
+
+    private async Task LoadOwners()
+    {
+        try
+        {
+            owners = await Http.GetFromJsonAsync<Owner[]>("api/owners");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading owners: {ex.Message}");
+            owners = Array.Empty<Owner>();
+        }
+    }
+
+    private IEnumerable<Owner> FilteredOwners
+    {
+        get
+        {
+            if (owners == null) return Enumerable.Empty<Owner>();
+            
+            var filtered = owners.AsEnumerable();
+
+            if (!string.IsNullOrWhiteSpace(searchText))
+            {
+                filtered = filtered.Where(o => 
+                    o.Name.Contains(searchText, StringComparison.OrdinalIgnoreCase) ||
+                    o.Email.Contains(searchText, StringComparison.OrdinalIgnoreCase));
+            }
+
+            return filtered;
+        }
+    }
+
+    private void ShowAddOwnerModal()
+    {
+        editingOwner = new() { Name = "", Email = "", OrganizationId = "ORG001" };
+        showModal = true;
+    }
+
+    private void ShowEditOwnerModal(Owner owner)
+    {
+        editingOwner = new Owner
+        {
+            Id = owner.Id,
+            Name = owner.Name,
+            Email = owner.Email,
+            Phone = owner.Phone,
+            OrganizationId = owner.OrganizationId
+        };
+        showModal = true;
+    }
+
+    private void HideModal()
+    {
+        showModal = false;
+    }
+
+    private async Task SaveOwner()
+    {
+        try
+        {
+            if (editingOwner.Id == 0)
+            {
+                await Http.PostAsJsonAsync("api/owners", editingOwner);
+            }
+            else
+            {
+                await Http.PutAsJsonAsync($"api/owners/{editingOwner.Id}", editingOwner);
+            }
+            
+            HideModal();
+            await LoadOwners();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error saving owner: {ex.Message}");
+        }
+    }
+
+    private async Task DeleteOwner(int id)
+    {
+        if (confirm("Are you sure you want to delete this owner?"))
+        {
+            try
+            {
+                await Http.DeleteAsync($"api/owners/{id}");
+                await LoadOwners();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error deleting owner: {ex.Message}");
+            }
+        }
+    }
+
+    private bool confirm(string message)
+    {
+        // In a real app, you'd use a proper confirmation dialog
+        return true;
+    }
+}
